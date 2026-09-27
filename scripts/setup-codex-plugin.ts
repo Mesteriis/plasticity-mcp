@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 const root = await realpath(resolve(import.meta.dirname, ".."));
 const home = join(homedir(), ".plasticity-mcp");
 const marketplace = "plasticity";
+const marketplaceSource = "https://github.com/Mesteriis/plasticity-mcp.git";
 const pluginId = `plasticity-mcp@${marketplace}`;
 const pluginRoot = join(root, "plugins", "plasticity-mcp");
 
@@ -14,10 +15,13 @@ await mkdir(home, { recursive: true, mode: 0o700 });
 await chmod(home, 0o700);
 await writePrivate("codex-repository", `${root}\n`);
 
-const sources = codexJson<{ marketplaces: Array<{ name: string; root: string }> }>(["plugin", "marketplace", "list", "--json"]);
+const sources = codexJson<{ marketplaces: Array<{ name: string; marketplaceSource?: { sourceType: string; source: string } }> }>(["plugin", "marketplace", "list", "--json"]);
 const existing = sources.marketplaces.find((entry) => entry.name === marketplace);
-if (existing?.root === root) throw new Error(`Marketplace ${marketplace} uses a local path; remove it before installing from Git`);
-if (!existing) codex(["plugin", "marketplace", "add", "Mesteriis/plasticity-mcp", "--ref", "main"]);
+if (existing && (existing.marketplaceSource?.sourceType !== "git" || existing.marketplaceSource.source !== marketplaceSource)) {
+  throw new Error(`Marketplace ${marketplace} does not point to ${marketplaceSource}`);
+}
+if (existing) codex(["plugin", "marketplace", "upgrade", marketplace]);
+else codex(["plugin", "marketplace", "add", "Mesteriis/plasticity-mcp", "--ref", "main"]);
 
 const manifest = JSON.parse(await readFile(join(pluginRoot, ".codex-plugin", "plugin.json"), "utf8")) as { version: string };
 const plugins = codexJson<{ installed: Array<{ pluginId: string; version: string; installed: boolean }> }>(["plugin", "list", "--json"]);
