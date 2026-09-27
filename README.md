@@ -1,8 +1,17 @@
 # Plasticity MCP
 
-A local MCP server for driving native CAD operations in Plasticity, with an optional Workbench for model review, structured feedback, and print preparation.
+Control Plasticity from an MCP client: inspect and measure native CAD geometry, create and edit models, and export the result. An optional Workbench supports model review, dimensional feedback, and print preparation.
 
-The primary target is Plasticity 26.1.3 on macOS Apple Silicon. The server uses Plasticity's own command factories and document history through a loopback-only Electron CDP endpoint. It does not patch or re-sign the application. MCP geometry inputs use millimeters and degrees; native edits support Plasticity Undo and Redo.
+**Runs locally on macOS Apple Silicon with Plasticity 26.1.3.** The MCP server connects to a Plasticity window selected by the user; it cannot run as a standalone cloud CAD service.
+
+| CAD workflow | What the server provides |
+| --- | --- |
+| Inspect | Scene state, precise B-rep measurements, and references to bodies, faces, and edges |
+| Model | Native creation and editing with document history, Undo, and Redo |
+| Deliver | Document operations, import/export, and camera screenshots |
+| Review | Optional local Workbench with measurement tables, dimensional feedback, and tablet annotations |
+
+The server uses Plasticity's own command factories and document history through a loopback-only Electron CDP endpoint. It does not patch or re-sign the application. MCP geometry inputs use millimeters and degrees; native edits support Plasticity Undo and Redo.
 
 ## What it provides
 
