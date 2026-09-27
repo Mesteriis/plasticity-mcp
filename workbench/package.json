@@ -15,6 +15,7 @@
     "test:server": "node --test test/server/*.test.ts",
     "test:e2e": "playwright test",
     "start": "node src/server/main.ts",
+    "open:owner": "node scripts/open-owner.ts",
     "mcp": "node scripts/run-mcp.ts"
   },
   "dependencies": {

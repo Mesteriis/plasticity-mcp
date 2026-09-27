@@ -105,6 +105,36 @@ test("does not create an orthotropic screen without all directional allowables",
   assert.equal(buildOrthotropicMaximumStressScreen(undefined, undefined, undefined, []), null);
 });
 
+test("normal stress screen distinguishes tension, compression, and mixed signs on each axis", () => {
+  const allowables = {
+    xTensionMPa: 100, xCompressionMPa: 10,
+    yTensionMPa: 100, yCompressionMPa: 10,
+    zTensionMPa: 100, zCompressionMPa: 10,
+    xyShearMPa: 100, xzShearMPa: 100, yzShearMPa: 100,
+  };
+  const evidenceByKey = Object.fromEntries(Object.keys(allowables).map((key) => [key, { ...evidence, id: key, label: key, value: allowables[key as keyof typeof allowables] }]));
+  const zero = { minimumMPa: 0, maximumMPa: 0 };
+  for (const axis of ["sxx", "syy", "szz"] as const) {
+    for (const [minimumMPa, maximumMPa, expectedComponent, expectedStressMPa, expectedUtilization] of [
+      [20, 25, `${axis[0]!.toUpperCase()}${axis.slice(1)} tension`, 25, 0.25],
+      [-25, -20, `${axis[0]!.toUpperCase()}${axis.slice(1)} compression`, -25, 2.5],
+      [-15, 25, `${axis[0]!.toUpperCase()}${axis.slice(1)} compression`, -15, 1.5],
+    ] as const) {
+      const result = buildOrthotropicMaximumStressScreen(allowables, evidenceByKey as never, "Factored limits.", [{
+        name: "service",
+        samples: [{ meshSizeMm: 1, meshSha256: "a".repeat(64), components: {
+          sxx: zero, syy: zero, szz: zero, sxy: zero, sxz: zero, syz: zero,
+          [axis]: { minimumMPa, maximumMPa },
+        } }],
+      }]);
+      const sample = result?.cases[0]?.samples[0];
+      assert.equal(sample?.governingComponent, expectedComponent);
+      assert.equal(sample?.governingStressMPa, expectedStressMPa);
+      assert.equal(sample?.maximumUtilization, expectedUtilization);
+    }
+  }
+});
+
 test("reports the sampled Tsai-Wu surface and proportional reserve factor with exact process binding", () => {
   const location = { elementId: 7, integrationPoint: 1, centroidMm: [1, 2, 3] as [number, number, number] };
   const sample = {

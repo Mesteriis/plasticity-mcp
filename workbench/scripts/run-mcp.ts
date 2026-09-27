@@ -1,13 +1,14 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { access } from "node:fs/promises";
-import { networkInterfaces } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import { resolve } from "node:path";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { isPrivateIpv4 } from "../src/server/config.ts";
+import { isPrivateIpv4, resolveWorkbenchConfig } from "../src/server/config.ts";
 import { WorkbenchApiClient } from "../src/server/mcp/client.ts";
 import { createWorkbenchMcpServer } from "../src/server/mcp/server.ts";
+import { readOwnerToken } from "../src/server/owner-auth.ts";
 
 const configuredOrigin = process.env.WORKBENCH_ORIGIN;
 let ownedWorkbench: ChildProcess | undefined;
@@ -24,7 +25,9 @@ if (!origin) {
   origin = await waitForOrigin(ownedWorkbench, 10_000);
 }
 if (!origin) throw new Error("Workbench HTTP service is unavailable");
-const server = createWorkbenchMcpServer(new WorkbenchApiClient(origin));
+const config = resolveWorkbenchConfig({ env: process.env, args: [], cwd: resolve(import.meta.dirname, "../.."), home: homedir() });
+const ownerToken = await readOwnerToken(config.projectsRoot);
+const server = createWorkbenchMcpServer(new WorkbenchApiClient(origin, ownerToken));
 await server.connect(new StdioServerTransport());
 
 const stop = () => ownedWorkbench?.kill("SIGTERM");

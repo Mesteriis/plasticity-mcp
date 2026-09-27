@@ -97,11 +97,11 @@ export function buildOrthotropicMaximumStressScreen(
     const samples = loadCase.samples.map((sample) => {
       const utilizations = [
         { component: "Sxx tension", stressMPa: sample.components.sxx.maximumMPa, allowableMPa: allowables.xTensionMPa, value: Math.max(0, sample.components.sxx.maximumMPa) / allowables.xTensionMPa },
-        { component: "Sxx compression", stressMPa: sample.components.sxx.minimumMPa, allowableMPa: allowables.xCompressionMPa, value: Math.abs(sample.components.sxx.minimumMPa) / allowables.xCompressionMPa },
+        { component: "Sxx compression", stressMPa: Math.min(0, sample.components.sxx.minimumMPa), allowableMPa: allowables.xCompressionMPa, value: Math.max(0, -sample.components.sxx.minimumMPa) / allowables.xCompressionMPa },
         { component: "Syy tension", stressMPa: sample.components.syy.maximumMPa, allowableMPa: allowables.yTensionMPa, value: Math.max(0, sample.components.syy.maximumMPa) / allowables.yTensionMPa },
-        { component: "Syy compression", stressMPa: sample.components.syy.minimumMPa, allowableMPa: allowables.yCompressionMPa, value: Math.abs(sample.components.syy.minimumMPa) / allowables.yCompressionMPa },
+        { component: "Syy compression", stressMPa: Math.min(0, sample.components.syy.minimumMPa), allowableMPa: allowables.yCompressionMPa, value: Math.max(0, -sample.components.syy.minimumMPa) / allowables.yCompressionMPa },
         { component: "Szz tension", stressMPa: sample.components.szz.maximumMPa, allowableMPa: allowables.zTensionMPa, value: Math.max(0, sample.components.szz.maximumMPa) / allowables.zTensionMPa },
-        { component: "Szz compression", stressMPa: sample.components.szz.minimumMPa, allowableMPa: allowables.zCompressionMPa, value: Math.abs(sample.components.szz.minimumMPa) / allowables.zCompressionMPa },
+        { component: "Szz compression", stressMPa: Math.min(0, sample.components.szz.minimumMPa), allowableMPa: allowables.zCompressionMPa, value: Math.max(0, -sample.components.szz.minimumMPa) / allowables.zCompressionMPa },
         shearPeak("Sxy shear", sample.components.sxy.minimumMPa, sample.components.sxy.maximumMPa, allowables.xyShearMPa),
         shearPeak("Sxz shear", sample.components.sxz.minimumMPa, sample.components.sxz.maximumMPa, allowables.xzShearMPa),
         shearPeak("Syz shear", sample.components.syz.minimumMPa, sample.components.syz.maximumMPa, allowables.yzShearMPa),

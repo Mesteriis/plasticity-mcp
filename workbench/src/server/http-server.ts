@@ -10,9 +10,11 @@ import type { ArtifactStore } from "./artifact-store.ts";
 import { isPrivateIpv4, type WorkbenchConfig } from "./config.ts";
 import type { PairingService } from "./pairing.ts";
 import type { ManufacturingService } from "./manufacturing/service.ts";
+import { ownerTokenMatches } from "./owner-auth.ts";
 import { ProjectRevisionConflict, type ProjectStore } from "./project-store.ts";
 
 export interface WorkbenchServerDependencies {
+  ownerToken: string;
   projects: ProjectStore;
   artifacts: ArtifactStore;
   pairing?: PairingService;
@@ -68,7 +70,7 @@ const constructionJournalRequestSchema = z.object({
 }).strict();
 
 export function createWorkbenchServer(dependencies: WorkbenchServerDependencies): WorkbenchHttpServer {
-  const { projects, artifacts, pairing, config, webRoot, manufacturing } = dependencies;
+  const { projects, artifacts, pairing, config, webRoot, manufacturing, ownerToken } = dependencies;
   const server = createServer((request, response) => {
     void handle(request, response).catch((error: unknown) => sendFailure(response, error));
   });
@@ -77,9 +79,26 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
     if (!isPrivateClientAddress(request.socket.remoteAddress ?? "")) {
       throw new RequestError(403, "network_forbidden", "Workbench accepts clients only from loopback or a private IPv4 network");
     }
+    const address = server.address();
+    if (!address || typeof address === "string") throw new RequestError(503, "not_ready", "Workbench is not ready");
+    const expectedOrigin = `http://${config.host}:${address.port}`;
+    if (request.headers.host !== `${config.host}:${address.port}`) {
+      throw new RequestError(403, "host_forbidden", "Workbench host is not allowed");
+    }
+    if ((request.headers.origin && request.headers.origin !== expectedOrigin) || request.headers["sec-fetch-site"] === "cross-site") {
+      throw new RequestError(403, "origin_forbidden", "Request origin is not allowed");
+    }
     const url = new URL(request.url ?? "/", "http://workbench.local");
     const method = request.method ?? "GET";
     const segments = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+
+    if (url.pathname === "/api/owner/session" && method === "POST") {
+      const input = z.object({ token: z.string() }).strict().parse(await readJson(request, config.maxJsonBytes));
+      if (!ownerTokenMatches(ownerToken, input.token)) throw new RequestError(403, "owner_forbidden", "Owner access denied");
+      response.setHeader("set-cookie", `workbench_owner=${encodeURIComponent(ownerToken)}; HttpOnly; SameSite=Strict; Path=/`);
+      sendJson(response, 200, { role: "owner" });
+      return;
+    }
 
     if (segments.length === 3 && segments[0] === "api" && segments[1] === "pair" && segments[2] === "exchange" && method === "POST") {
       if (!pairing) throw new RequestError(404, "not_found", "Pairing is not enabled");
@@ -101,12 +120,12 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
     }
     if (segments.length === 2 && segments[0] === "api" && segments[1] === "projects") {
       if (method === "GET") {
-        if (!isOwnerRequest(request, config.host)) throw new RequestError(403, "project_list_forbidden", "Project listing is available only on this Mac");
+        if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "project_list_forbidden", "Project listing is available only to the owner");
         sendJson(response, 200, projects.list());
         return;
       }
       if (method === "POST") {
-        if (!isOwnerRequest(request, config.host)) throw new RequestError(403, "project_create_forbidden", "Projects can be created only on this Mac");
+        if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "project_create_forbidden", "Projects can be created only by the owner");
         const input = createProjectSchema.parse(await readJson(request, config.maxJsonBytes));
         const directory = join(config.projectsRoot, randomUUID());
         await mkdir(directory, { recursive: true });
@@ -125,7 +144,7 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
     const requiredRole = method === "GET" ? "view"
       : segments[3] === "annotations" || segments[3] === "dimension-changes" ? "annotate"
       : "edit";
-    authorizeProjectRequest(request, pairing, projectId, requiredRole, config.host);
+    authorizeProjectRequest(request, pairing, projectId, requiredRole, ownerToken, expectedOrigin);
 
     if (segments.length === 3 && method === "GET") {
       sendJson(response, 200, { project, events: projects.eventsAfter(projectId, 0) });
@@ -133,7 +152,7 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
     }
     if (segments.length === 4 && segments[3] === "pairings" && method === "POST") {
       if (!pairing) throw new RequestError(404, "not_found", "Pairing is not enabled");
-      if (!isOwnerRequest(request, config.host)) throw new RequestError(403, "pairing_forbidden", "Pairing links can be created only from this Mac");
+      if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "pairing_forbidden", "Pairing links can be created only by the owner");
       const input = z.object({
         role: z.enum(["view", "annotate", "edit"]),
         ttlMs: z.number().int().positive().max(7 * 24 * 60 * 60 * 1_000),
@@ -155,13 +174,13 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
     }
     if (segments.length === 4 && segments[3] === "pairings" && method === "GET") {
       if (!pairing) throw new RequestError(404, "not_found", "Pairing is not enabled");
-      if (!isOwnerRequest(request, config.host)) throw new RequestError(403, "pairing_forbidden", "Pairing sessions can be viewed only from this Mac");
+      if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "pairing_forbidden", "Pairing sessions can be viewed only by the owner");
       sendJson(response, 200, pairing.list(projectId));
       return;
     }
     if (segments.length === 5 && segments[3] === "pairings" && method === "DELETE") {
       if (!pairing) throw new RequestError(404, "not_found", "Pairing is not enabled");
-      if (!isOwnerRequest(request, config.host)) throw new RequestError(403, "pairing_forbidden", "Pairing sessions can be revoked only from this Mac");
+      if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "pairing_forbidden", "Pairing sessions can be revoked only by the owner");
       if (!pairing.revokeById(projectId, segments[4]!)) throw new RequestError(404, "pairing_not_found", "Active pairing session not found");
       response.statusCode = 204;
       response.end();
@@ -174,7 +193,7 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
     }
     if (segments.length === 5 && segments[3] === "manufacturing" && segments[4] === "profiles" && method === "POST") {
       if (!manufacturing) throw new RequestError(503, "manufacturing_unavailable", "Manufacturing service is not configured");
-      if (!isOwnerRequest(request, config.host)) throw new RequestError(403, "profile_registration_forbidden", "Manufacturing profiles can be registered only on this Mac");
+      if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "profile_registration_forbidden", "Manufacturing profiles can be registered only by the owner");
       const input = manufacturingProfileRegistrationSchema.parse(await readJson(request, config.maxJsonBytes));
       sendJson(response, 201, await manufacturing.registerProfile(input));
       return;
@@ -215,6 +234,7 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
       return;
     }
     if (segments.length === 7 && segments[3] === "manufacturing" && segments[4] === "jobs" && segments[6] === "approve" && method === "POST") {
+      if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "approval_forbidden", "Print approval requires the owner");
       if (!manufacturing) throw new RequestError(503, "manufacturing_unavailable", "Manufacturing service is not configured");
       const input = z.object({ confirmed: z.literal(true) }).strict().parse(await readJson(request, config.maxJsonBytes));
       try { sendJson(response, 200, manufacturing.approve(projectId, segments[5]!, input.confirmed)); }
@@ -222,6 +242,7 @@ export function createWorkbenchServer(dependencies: WorkbenchServerDependencies)
       return;
     }
     if (segments.length === 7 && segments[3] === "manufacturing" && segments[4] === "jobs" && segments[6] === "submit" && method === "POST") {
+      if (!isOwnerRequest(request, ownerToken, expectedOrigin)) throw new RequestError(403, "submission_forbidden", "Print submission requires the owner");
       if (!manufacturing) throw new RequestError(503, "manufacturing_unavailable", "Manufacturing service is not configured");
       try { sendJson(response, 200, await manufacturing.submit(projectId, segments[5]!)); }
       catch (error) { throw manufacturingConflict(error); }
@@ -355,6 +376,9 @@ async function serveWeb(response: ServerResponse, webRoot: string, pathname: str
 }
 
 async function readJson(request: IncomingMessage, maxBytes: number): Promise<unknown> {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers["content-type"] ?? "")) {
+    throw new RequestError(415, "unsupported_media_type", "Content-Type must be application/json");
+  }
   const chunks: Buffer[] = [];
   let bytes = 0;
   for await (const sourceChunk of request) {
@@ -417,17 +441,12 @@ function sendFailure(response: ServerResponse, error: unknown): void {
     return;
   }
   sendJson(response, 500, {
-    error: { code: "internal_error", message: error instanceof Error ? error.message : "Internal error" },
+    error: { code: "internal_error", message: "Internal error" },
   });
 }
 
 function manufacturingConflict(error: unknown): RequestError {
   return new RequestError(409, "manufacturing_conflict", error instanceof Error ? error.message : String(error));
-}
-
-function isLoopbackRequest(request: IncomingMessage): boolean {
-  const address = request.socket.remoteAddress ?? "";
-  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 }
 
 export function isPrivateClientAddress(address: string): boolean {
@@ -441,28 +460,33 @@ function authorizeProjectRequest(
   pairing: PairingService | undefined,
   projectId: string,
   requiredRole: "view" | "annotate" | "edit",
-  ownerHost: string,
+  ownerToken: string,
+  expectedOrigin: string,
 ): void {
-  if (isOwnerRequest(request, ownerHost)) return;
+  if (isOwnerRequest(request, ownerToken, expectedOrigin)) return;
   const raw = tokenFromCookie(request.headers.cookie);
   try {
     if (!pairing || !raw) throw new Error("Missing project session");
+    if (request.method !== "GET" && request.headers.origin !== expectedOrigin) throw new Error("Request origin is required");
     pairing.authorize(raw, projectId, requiredRole);
   } catch (error) {
     throw new RequestError(403, "project_forbidden", error instanceof Error ? error.message : "Project access denied");
   }
 }
 
-function isOwnerRequest(request: IncomingMessage, ownerHost: string): boolean {
-  const address = request.socket.remoteAddress ?? "";
-  return isLoopbackRequest(request) || address === ownerHost || address === `::ffff:${ownerHost}`;
+function isOwnerRequest(request: IncomingMessage, ownerToken: string, expectedOrigin: string): boolean {
+  const authorization = request.headers.authorization;
+  if (authorization?.startsWith("Bearer ") && ownerTokenMatches(ownerToken, authorization.slice(7))) return true;
+  const cookie = tokenFromCookie(request.headers.cookie, "workbench_owner");
+  return ownerTokenMatches(ownerToken, cookie)
+    && (request.method === "GET" || request.headers.origin === expectedOrigin);
 }
 
-function tokenFromCookie(cookie: string | undefined): string | undefined {
+function tokenFromCookie(cookie: string | undefined, tokenName = "workbench_session"): string | undefined {
   if (!cookie) return undefined;
   for (const item of cookie.split(";")) {
     const [name, ...parts] = item.trim().split("=");
-    if (name === "workbench_session") return decodeURIComponent(parts.join("="));
+    if (name === tokenName) return decodeURIComponent(parts.join("="));
   }
   return undefined;
 }

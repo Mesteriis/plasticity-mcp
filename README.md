@@ -19,7 +19,7 @@ See the [full tool reference](docs/tool-reference.md), [acceptance matrix](docs/
 - macOS on Apple Silicon
 - Plasticity 26.1.3 installed at `/Applications/Plasticity.app`
 - Node.js 24 or newer
-- Codex CLI for the example MCP registration below
+- Codex CLI for the Git-backed plugin installation below
 
 This is an early, version-specific project. Live CAD and slicer operations depend on the installed applications and are not covered by mock tests alone. Check the [acceptance matrix](docs/acceptance-matrix.md) before relying on a specific operation.
 
@@ -30,15 +30,18 @@ git clone https://github.com/Mesteriis/plasticity-mcp.git
 cd plasticity-mcp
 npm install
 npm run start:plasticity
+npm run setup:codex
 ```
 
-In another terminal, register the stdio MCP server with Codex:
+`setup:codex` adds this GitHub repository as a Codex plugin marketplace and installs the `plasticity-mcp` plugin from Git. It records this checkout's path in a private file under `~/.plasticity-mcp` so the two MCP servers can run the checked-out code and its installed dependencies. No machine-specific paths are committed. Open a new Codex chat after installation.
+
+To use the MCP server without the plugin, register it directly instead:
 
 ```sh
 codex mcp add plasticity -- npm --prefix "$PWD" start
 ```
 
-Then restart or refresh Codex's MCP connections. Ask the agent to call `plasticity_list_windows`, then connect to an explicitly selected window with `plasticity_connect`.
+Ask the agent to call `plasticity_list_windows`, then connect to an explicitly selected window with `plasticity_connect`.
 
 The launcher does not terminate an existing Plasticity process to add MCP access. If it reports that a restart is needed, save your documents, close Plasticity yourself, then rerun the command. CDP listens on loopback only.
 
@@ -49,6 +52,8 @@ The Workbench is not required for chat-based use. Start it on the local machine 
 ```sh
 npm run start:workbench
 ```
+
+In another terminal on the same Mac, run `npm --workspace workbench run open:owner` to open an authenticated owner session. The server address alone does not grant owner access.
 
 To make it reachable by a tablet on the same private network, run `npm run start:workbench -- --lan`; the server prints its local address. Do not expose it to the public internet. Follow the [Workbench guide](docs/workbench-operations.md) for registration, sharing, backup, and recovery.
 

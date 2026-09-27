@@ -16,6 +16,7 @@ import { ManufacturingJobStore } from "../src/server/manufacturing/store.ts";
 import { ManufacturingService } from "../src/server/manufacturing/service.ts";
 import { discoverManufacturingProfiles } from "../src/server/manufacturing/profile-registry.ts";
 import { ManufacturingProfileStore } from "../src/server/manufacturing/profile-store.ts";
+import { loadOrCreateOwnerToken } from "../src/server/owner-auth.ts";
 import { CrealityPrintSlicer, OrcaFamilySlicer } from "../src/server/manufacturing/slicer.ts";
 import { SqliteProjectStore } from "../src/server/project-store.ts";
 
@@ -175,6 +176,7 @@ async function main(): Promise<void> {
       new Map([["moonraker", noSubmitPrinter(printerCalls)]]),
     );
     http = createWorkbenchServer({
+      ownerToken: await loadOrCreateOwnerToken(projectsRoot),
       projects,
       artifacts,
       manufacturing,
@@ -191,6 +193,7 @@ async function main(): Promise<void> {
         ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
         ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
         WORKBENCH_ORIGIN: address.origin,
+        WORKBENCH_PROJECTS_ROOT: projectsRoot,
       },
       stderr: "pipe",
     });

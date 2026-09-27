@@ -21,13 +21,14 @@ async function createHarness(context: test.TestContext) {
   const projects = new SqliteProjectStore(database);
   const artifacts = new ArtifactStore(join(root, "artifacts"), database);
   const http = createWorkbenchServer({
+    ownerToken: "a".repeat(43),
     projects,
     artifacts,
     config: { host: "127.0.0.1", port: 0, projectsRoot: join(root, "projects"), maxJsonBytes: 1024 * 1024 },
   });
   const address = await http.listen();
   const project = projects.create("Bracket", join(root, "projects", "bracket"));
-  const server = createWorkbenchMcpServer(new WorkbenchApiClient(address.origin));
+  const server = createWorkbenchMcpServer(new WorkbenchApiClient(address.origin, "a".repeat(43)));
   const client = new Client({ name: "workbench-test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);

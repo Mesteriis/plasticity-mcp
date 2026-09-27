@@ -66,6 +66,14 @@ export class ProjectEventHub {
   }
 
   private upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
+    const address = this.server.address();
+    if (!address || typeof address === "string") return rejectUpgrade(socket, 503, "Service Unavailable");
+    const expectedHost = `${address.address}:${address.port}`;
+    if (request.headers.host !== expectedHost ||
+      (request.headers.origin && request.headers.origin !== `http://${expectedHost}`) ||
+      request.headers["sec-fetch-site"] === "cross-site") {
+      return rejectUpgrade(socket, 403, "Forbidden");
+    }
     const url = new URL(request.url ?? "/", "http://workbench.local");
     const match = /^\/api\/projects\/([^/]+)\/events\/ws$/.exec(url.pathname);
     if (!match?.[1]) return rejectUpgrade(socket, 404, "Not Found");

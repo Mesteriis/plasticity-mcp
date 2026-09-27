@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { ManufacturingProfile } from "../shared/contracts.ts";
@@ -7,6 +7,7 @@ import { ArtifactStore } from "./artifact-store.ts";
 import { resolveWorkbenchConfig } from "./config.ts";
 import { openDatabase } from "./database.ts";
 import { ProjectEventHub } from "./event-hub.ts";
+import { loadOrCreateOwnerToken } from "./owner-auth.ts";
 import { createWorkbenchServer } from "./http-server.ts";
 import { PairingService } from "./pairing.ts";
 import { SqliteProjectStore } from "./project-store.ts";
@@ -20,9 +21,10 @@ import { MoonrakerPrinter, type PrinterAdapter } from "./manufacturing/printer.t
 const config = resolveWorkbenchConfig({
   env: process.env,
   args: process.argv.slice(2),
-  cwd: process.cwd(),
+  cwd: resolve(import.meta.dirname, "../../.."),
   home: homedir(),
 });
+const ownerToken = await loadOrCreateOwnerToken(config.projectsRoot);
 const database = openDatabase(join(config.projectsRoot, "workbench.sqlite"));
 const projects = new SqliteProjectStore(database);
 const artifacts = new ArtifactStore(join(config.projectsRoot, ".artifacts"), database);
@@ -59,7 +61,7 @@ const manufacturing = new ManufacturingService(
   printers,
 );
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "../../dist");
-const service = createWorkbenchServer({ projects, artifacts, pairing, config, webRoot, manufacturing });
+const service = createWorkbenchServer({ projects, artifacts, pairing, config, webRoot, manufacturing, ownerToken });
 const events = new ProjectEventHub(service.server, projects, pairing);
 const address = await service.listen();
 

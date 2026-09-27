@@ -49,10 +49,12 @@ export class WorkbenchApiError extends Error {
 
 export class WorkbenchApiClient {
   private readonly origin: string;
+  private readonly ownerToken: string;
   private readonly fetcher: typeof fetch;
 
-  constructor(origin: string, fetcher: typeof fetch = fetch) {
+  constructor(origin: string, ownerToken: string, fetcher: typeof fetch = fetch) {
     this.origin = new URL(origin).origin;
+    this.ownerToken = ownerToken;
     this.fetcher = fetcher;
   }
 
@@ -186,7 +188,7 @@ export class WorkbenchApiClient {
   }
 
   private async request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-    const init: RequestInit = { method, headers: { accept: "application/json" } };
+    const init: RequestInit = { method, headers: { accept: "application/json", authorization: `Bearer ${this.ownerToken}` } };
     if (body !== undefined) {
       init.body = JSON.stringify(body);
       init.headers = { ...init.headers, "content-type": "application/json" };
@@ -198,7 +200,7 @@ export class WorkbenchApiClient {
   }
 
   private async requestRaw<T>(method: "POST", path: string, body: ReadableStream<Uint8Array>, headers: Record<string, string>): Promise<T> {
-    const init: RequestInit & { duplex: "half" } = { method, headers: { accept: "application/json", ...headers }, body, duplex: "half" };
+    const init: RequestInit & { duplex: "half" } = { method, headers: { accept: "application/json", authorization: `Bearer ${this.ownerToken}`, ...headers }, body, duplex: "half" };
     const response = await this.fetcher(`${this.origin}${path}`, init);
     const payload = await response.json() as unknown;
     if (!response.ok) throw new WorkbenchApiError(response.status, payload);

@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "plasticity": {
+      "command": "/bin/zsh",
+      "args": ["-lc", "exec node scripts/launcher.mjs plasticity"],
+      "cwd": ".",
+      "startup_timeout_sec": 90,
+      "tool_timeout_sec": 600
+    },
+    "plasticity-workbench": {
+      "command": "/bin/zsh",
+      "args": ["-lc", "exec node scripts/launcher.mjs workbench"],
+      "cwd": ".",
+      "startup_timeout_sec": 90,
+      "tool_timeout_sec": 600
+    }
+  }
+}

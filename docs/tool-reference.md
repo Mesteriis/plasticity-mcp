@@ -51,7 +51,7 @@ codex mcp add plasticity -- npm --prefix . start
 
 The agent should call `plasticity_list_windows`, then
 `plasticity_connect` with an explicit `targetId`. One MCP process owns a window
-at a time. Lock files live under `.plasticity-mcp/` and stale process locks are
+at a time. Lock files live under `~/.plasticity-mcp/ownership/` by default, shared across checkouts, and stale process locks are
 recovered automatically. Reconnecting to the same window reuses its current
 session. Switching windows first acquires and validates the new connection, so
 a busy target or failed initial read leaves the existing connection intact.
@@ -2195,7 +2195,9 @@ Workbench объединяет проекты, интерактивный STEP-�
 npm run start:workbench -- --lan
 ```
 
-Откройте напечатанный адрес на Mac. В проекте нажмите **Поделиться**, перенесите
+На Mac выполните `npm --workspace workbench run open:owner -- --lan`, чтобы открыть
+владельческую сессию; напечатанный адрес сам по себе прав владельца не даёт.
+В проекте нажмите **Поделиться**, перенесите
 одноразовую ссылку на планшет и рисуйте поверх зафиксированной версии модели.
 Аннотации отправляются агенту одним пакетом только после явной кнопки. Поля
 размеров проверяют числовой тип, диапазон, шаг и целочисленные значения до

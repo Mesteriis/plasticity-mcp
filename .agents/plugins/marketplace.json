@@ -1,0 +1,20 @@
+{
+  "name": "plasticity",
+  "interface": {
+    "displayName": "Plasticity"
+  },
+  "plugins": [
+    {
+      "name": "plasticity-mcp",
+      "source": {
+        "source": "local",
+        "path": "./plugins/plasticity-mcp"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

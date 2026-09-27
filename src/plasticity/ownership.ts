@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, open, readFile, stat, unlink, type FileHandle } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 export interface WindowOwnership {
@@ -8,10 +9,13 @@ export interface WindowOwnership {
 
 export async function acquireWindowOwnership(
   targetId: string,
-  directory = process.env.PLASTICITY_MCP_STATE_DIR ?? join(process.cwd(), ".plasticity-mcp"),
+  directory = process.env.PLASTICITY_MCP_STATE_DIR ?? join(homedir(), ".plasticity-mcp", "ownership"),
+  endpoint = process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223",
 ): Promise<WindowOwnership> {
-  await mkdir(directory, { recursive: true });
-  const key = createHash("sha256").update(targetId).digest("hex").slice(0, 24);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const cdp = new URL(endpoint);
+  const host = ["localhost", "[::1]"].includes(cdp.hostname) ? "127.0.0.1" : cdp.hostname;
+  const key = createHash("sha256").update(JSON.stringify([cdp.protocol, host, cdp.port, targetId])).digest("hex").slice(0, 24);
   const path = join(directory, `window-${key}.lock`);
 
   for (let attempt = 0; attempt < 2; attempt++) {

@@ -1,6 +1,9 @@
 import type { AnnotationBatchInput, DimensionChangeBatchInput, ManufacturingProfile, PairingGrant, PrinterStatus, Project, SliceJob, WorkbenchEvent } from "../shared/contracts.ts";
 
 export class BrowserApi {
+  async exchangeOwnerToken(token: string): Promise<void> {
+    await this.request("POST", "/api/owner/session", { token });
+  }
   async projects(): Promise<Project[]> {
     return this.request("GET", "/api/projects");
   }
@@ -60,7 +63,17 @@ export class BrowserApi {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const payload = response.status === 204 ? undefined : await response.json() as unknown;
-    if (!response.ok) throw new Error(JSON.stringify(payload));
+    if (!response.ok) {
+      const failure = payload as { error?: { code?: string; message?: string } } | undefined;
+      throw new ApiError(response.status, failure?.error?.code, failure?.error?.message ?? `Request failed (${response.status})`);
+    }
     return payload as T;
+  }
+}
+
+export class ApiError extends Error {
+  constructor(readonly status: number, readonly code: string | undefined, message: string) {
+    super(message);
+    this.name = "ApiError";
   }
 }

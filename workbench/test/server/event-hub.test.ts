@@ -39,6 +39,7 @@ test("replays persisted events and then streams new project events", async (cont
   const artifacts = new ArtifactStore(join(root, "artifacts"), database);
   const pairing = new PairingService(database);
   const service = createWorkbenchServer({
+    ownerToken: "a".repeat(43),
     projects,
     artifacts,
     pairing,
@@ -52,6 +53,13 @@ test("replays persisted events and then streams new project events", async (cont
   });
   const project = projects.create("Bracket", join(root, "project"));
   const token = pairing.issue(project.id, "view", 60_000);
+  const foreignSocket = new WebSocket(`${address.origin.replace("http", "ws")}/api/projects/${project.id}/events/ws?token=${token.raw}`, { origin: "https://example.org" });
+  const foreignStatus = await new Promise<number>((resolve, reject) => {
+    foreignSocket.once("unexpected-response", (_request, response) => resolve(response.statusCode ?? 0));
+    foreignSocket.once("open", () => reject(new Error("Cross-origin socket unexpectedly opened")));
+    foreignSocket.once("error", () => undefined);
+  });
+  assert.equal(foreignStatus, 403);
   const socket = new WebSocket(`${address.origin.replace("http", "ws")}/api/projects/${project.id}/events/ws?token=${token.raw}`);
   context.after(() => socket.close());
   await onceOpen(socket);
@@ -83,6 +91,7 @@ test("rejects a token issued for another project", async (context) => {
   const artifacts = new ArtifactStore(join(root, "artifacts"), database);
   const pairing = new PairingService(database);
   const service = createWorkbenchServer({
+    ownerToken: "a".repeat(43),
     projects,
     artifacts,
     pairing,

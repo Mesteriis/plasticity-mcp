@@ -240,14 +240,15 @@ test("slices from an immutable profile hash and preserves that identity on the j
     ],
   });
   const http = createWorkbenchServer({
+    ownerToken: "a".repeat(43),
     projects, artifacts, manufacturing: service,
     config: { host: "127.0.0.1", port: 0, projectsRoot: root, maxJsonBytes: 1024 * 1024 },
   });
   const address = await http.listen();
   context.after(async () => await http.close());
-  assert.deepEqual(await new WorkbenchApiClient(address.origin).interfaceLayerHeights(project.id, job.id, [1, 3]),
+  assert.deepEqual(await new WorkbenchApiClient(address.origin, "a".repeat(43)).interfaceLayerHeights(project.id, job.id, [1, 3]),
     service.interfaceLayerHeights(project.id, job.id, [1, 3]));
-  assert.deepEqual(await new WorkbenchApiClient(address.origin).layerPathOrientations(project.id, job.id, [1, 2, 4]),
+  assert.deepEqual(await new WorkbenchApiClient(address.origin, "a".repeat(43)).layerPathOrientations(project.id, job.id, [1, 2, 4]),
     service.layerPathOrientations(project.id, job.id, [1, 2, 4]));
   assert.throws(() => service.interfaceLayerHeights(project.id, job.id, [4]), /between 1 and 3/);
   assert.throws(() => service.layerPathOrientations(project.id, job.id, [5]), /between 1 and 4/);
