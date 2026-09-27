@@ -1,5 +1,7 @@
 # Plasticity MCP
 
+![Plasticity MCP local CAD workflow](docs/assets/workflow.svg)
+
 Control Plasticity from an MCP client: inspect and measure native CAD geometry, create and edit models, and export the result. An optional Workbench supports model review, dimensional feedback, and print preparation.
 
 **Runs locally on macOS Apple Silicon with Plasticity 26.1.3.** The MCP server connects to a Plasticity window selected by the user; it cannot run as a standalone cloud CAD service.
