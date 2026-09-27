@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": [
+    "src/shared/**/*.ts",
+    "src/web/**/*.ts",
+    "src/web/**/*.tsx",
+    "test/web/**/*.ts",
+    "test/web/**/*.tsx"
+  ],
+  "exclude": ["src/web/model/step-worker.ts"]
+}

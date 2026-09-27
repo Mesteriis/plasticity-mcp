@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove local paths, private CAD data, screenshots with personal information, and credentials before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Plasticity MCP commit or version
+      placeholder: commit SHA or release tag
+    validations:
+      required: true
+  - type: input
+    id: plasticity
+    attributes:
+      label: Plasticity version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: macOS and Node.js versions
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the MCP tool name and sanitized input where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Checks or logs
+      description: Share only sanitized output; remove model contents, local paths, and secrets.

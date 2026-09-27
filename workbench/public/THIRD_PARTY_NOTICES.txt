@@ -1,0 +1,13 @@
+Plasticity Workbench third-party notice
+
+occt-import-js 0.0.23 is used to create a display mesh from STEP files in the
+browser. It is licensed under GNU LGPL 2.1. Its source, license text, and
+replacement-compatible WebAssembly build are available from:
+https://github.com/kovacsv/occt-import-js/tree/0.0.23
+
+Open CASCADE Technology code included by occt-import-js is distributed under
+GNU LGPL 2.1 with the Open CASCADE exception. The upstream notices are at:
+https://github.com/Open-Cascade-SAS/OCCT
+
+The STEP mesh is used for display and picking only. Exact acceptance dimensions
+come from Plasticity's native B-Rep measurements.

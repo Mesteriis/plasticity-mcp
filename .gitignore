@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.superpowers/
+.plasticity-mcp/
+.plasticity-workbench/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+.serena/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
