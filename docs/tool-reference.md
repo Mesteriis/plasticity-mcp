@@ -56,13 +56,14 @@ recovered automatically. Reconnecting to the same window reuses its current
 session. Switching windows first acquires and validates the new connection, so
 a busy target or failed initial read leaves the existing connection intact.
 
-Some MCP clients expose only a subset of a large server's named tools. In that
-case, use `plasticity_call` with `toolName: "catalog"` and a name or description
-query to get a bounded page of registered operations and their JSON input
-schemas. Pass a returned operation name and its `arguments` object back to
-`plasticity_call` to invoke it. The dispatcher only calls tools registered by
-this server and applies each operation's original schema and handler; it does
-not accept JavaScript or arbitrary method names.
+The default `npm start` and Codex plugin expose 10 core named tools plus
+`plasticity_call`. Use `plasticity_call` with `toolName: "catalog"` and a name
+or description query to get a bounded page of all operations and their JSON
+input schemas. Pass a returned operation name and its `arguments` object back
+to `plasticity_call` to invoke it. The dispatcher only calls tools registered
+by this server and applies each operation's original schema and handler; it
+does not accept JavaScript or arbitrary method names. To expose every operation
+directly, run `npm run start:full` and register that command with the MCP client.
 
 Call `plasticity_status` before editing and pass its `revision` to mutation
 tools. It returns compact, paginated body bounds and topology counts (50 bodies

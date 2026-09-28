@@ -54,6 +54,8 @@ codex mcp add plasticity -- npm --prefix "$PWD" start
 
 Ask the agent to call `plasticity_list_windows`, then connect to an explicitly selected window with `plasticity_connect`.
 
+The default MCP catalog shows the core connect, inspection, change-tracking, and screenshot tools plus `plasticity_call`. For any other operation, use `plasticity_call` with `toolName: "catalog"` and a search query to get its name and input schema, then call it through the same dispatcher. The full catalog remains available with `npm run start:full`; existing handlers and validation are the same in both modes.
+
 The launcher does not terminate an existing Plasticity process to add MCP access. If it reports that a restart is needed, save your documents, close Plasticity yourself, then rerun the command. CDP listens on loopback only.
 
 ### Optional Workbench

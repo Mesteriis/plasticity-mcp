@@ -1,6 +1,6 @@
 {
   "name": "plasticity-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -10,7 +10,8 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "start": "node scripts/run-server.ts",
+    "start": "node scripts/run-server.ts --compact-tools",
+    "start:full": "node scripts/run-server.ts",
     "start:plasticity": "node scripts/start-plasticity.ts",
     "start:plasticity-isolated": "node scripts/start-plasticity-isolated.ts",
     "start:workbench": "node scripts/start-workbench.ts",

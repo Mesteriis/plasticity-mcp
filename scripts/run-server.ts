@@ -4,7 +4,7 @@ import { delimiter } from "node:path";
 import { createAnalysisClient } from "../src/codex/analysis-client.ts";
 import { resolveAnalysisProfile, resolveReferenceSearchProfile } from "../src/codex/analysis-profile.ts";
 import { createReferenceSearchClient } from "../src/codex/reference-search-client.ts";
-import { createServer, PlasticitySession, strengthDependenciesForSession } from "../src/server.ts";
+import { createCompactServer, createServer, PlasticitySession, strengthDependenciesForSession } from "../src/server.ts";
 import { StrengthStore } from "../src/strength/store.ts";
 import { FemReportStore } from "../src/strength/fem/fem-report-store.ts";
 import { PrintedThreadQualificationStore } from "../src/printing/thread-qualification.ts";
@@ -42,7 +42,9 @@ const strength = strengthDependenciesForSession(session, {
 const threadQualifications = process.env.PLASTICITY_THREAD_QUALIFICATION_ROOT
   ? new PrintedThreadQualificationStore(process.env.PLASTICITY_THREAD_QUALIFICATION_ROOT)
   : new PrintedThreadQualificationStore();
-const server = createServer(session, strength, threadQualifications);
+const server = process.argv.includes("--compact-tools")
+  ? createCompactServer(session, strength, threadQualifications)
+  : createServer(session, strength, threadQualifications);
 const transport = new StdioServerTransport();
 await server.connect(transport);
 

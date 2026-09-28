@@ -40,6 +40,7 @@ import {
   printedThreadQualificationMatchSchema,
 } from "./printing/thread-qualification.ts";
 import { PLASTICITY_MCP_INSTRUCTIONS } from "./server-instructions.ts";
+import { exposeDirectTool, type ToolCatalogMode } from "./tool-catalog.ts";
 
 const vector = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 const vector2 = z.tuple([z.number().finite(), z.number().finite()]);
@@ -1890,6 +1891,22 @@ export function strengthDependenciesForSession(
 }
 
 export function createServer(
+  session?: SessionLike,
+  suppliedStrength?: StrengthDependencies,
+  threadQualifications?: PrintedThreadQualificationStore,
+  stepImportReferences?: StepImportReferenceStore,
+  constructionHistory?: ConstructionHistoryStore | null,
+  stepReferenceDownloader?: StepReferenceDownloaderLike,
+): McpServer {
+  return createServerWithCatalog("full", session, suppliedStrength, threadQualifications, stepImportReferences, constructionHistory, stepReferenceDownloader);
+}
+
+export function createCompactServer(...args: Parameters<typeof createServer>): McpServer {
+  return createServerWithCatalog("compact", ...args);
+}
+
+function createServerWithCatalog(
+  catalogMode: ToolCatalogMode,
   session: SessionLike = new PlasticitySession(),
   suppliedStrength?: StrengthDependencies,
   threadQualifications: PrintedThreadQualificationStore = new PrintedThreadQualificationStore(),
@@ -1899,7 +1916,7 @@ export function createServer(
     ? { root: process.env.PLASTICITY_REFERENCE_ARTIFACT_ROOT }
     : {}),
 ): McpServer {
-  const server = new McpServer({ name: "plasticity-mcp", version: "0.2.0" }, { instructions: PLASTICITY_MCP_INSTRUCTIONS });
+  const server = new McpServer({ name: "plasticity-mcp", version: "0.2.1" }, { instructions: PLASTICITY_MCP_INSTRUCTIONS });
   const strength = suppliedStrength ?? strengthDependenciesForSession(session, {
     analysisUnavailableReason: "The isolated Codex analysis profile was not initialized by this server launcher",
   });
@@ -1941,7 +1958,7 @@ export function createServer(
   const routedTools = new Map<string, RoutedTool>();
   const rawRegisterTool = server.registerTool.bind(server) as unknown as RegisterTool;
   (server as unknown as { registerTool: RegisterTool }).registerTool = (name, config, callback) => {
-    const registered = rawRegisterTool(name, config, callback);
+    const registered = exposeDirectTool(catalogMode, name) ? rawRegisterTool(name, config, callback) : undefined;
     routedTools.set(name, { name, description: config.description, inputSchema: config.inputSchema, annotations: config.annotations, callback });
     return registered;
   };

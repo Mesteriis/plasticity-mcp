@@ -17,6 +17,7 @@ try {
   const root = (await readFile(join(homedir(), ".plasticity-mcp", "codex-repository"), "utf8")).trim();
   if (!root) throw new Error("Repository path is empty");
   process.chdir(root);
+  if (process.argv[2] === "plasticity") process.argv.push("--compact-tools");
   await import(pathToFileURL(join(root, target)).href);
 } catch (error) {
   process.stderr.write(`Plasticity MCP could not start: ${error instanceof Error ? error.message : String(error)}\nRun npm run setup:codex in the repository and try again.\n`);

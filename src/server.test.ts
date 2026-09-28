@@ -9,7 +9,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import type { AnalysisClient } from "./codex/analysis-client.ts";
-import { createServer as createPlasticityServer, PlasticitySession, strengthDependenciesForSession, type SessionLike } from "./server.ts";
+import { createCompactServer, createServer as createPlasticityServer, PlasticitySession, strengthDependenciesForSession, type SessionLike } from "./server.ts";
 import { diffScenes } from "./plasticity/change-tracker.ts";
 import { frameFromOriginNormalX } from "./plasticity/construction.ts";
 import { PlasticityOperations } from "./plasticity/operations.ts";
@@ -1321,6 +1321,56 @@ test("Codex tool router catalogs and validates every registered operation", asyn
   const unknown = await client.callTool({ name: "plasticity_call", arguments: { toolName: "not_a_registered_tool", arguments: {} } });
   assert.equal(unknown.isError, true);
   assert.equal(createBoxCalls, 1);
+  await client.close(); await server.close();
+});
+
+test("compact catalog exposes core tools while routing hidden operations through their original handlers", async () => {
+  let state: RuntimeState = emptyState();
+  let createBoxCalls = 0;
+  const operations = {
+    async state() { return state; },
+    async createBox() { createBoxCalls += 1; state = { ...state, revision: "r2" }; return state; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const server = createCompactServer(fake, undefined, undefined, undefined, null);
+  const client = new Client({ name: "compact-tool-catalog-client", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport); await client.connect(clientTransport);
+
+  const listed = await client.listTools();
+  assert.deepEqual(new Set(listed.tools.map((tool) => tool.name)), new Set([
+    "plasticity_call", "plasticity_list_windows", "plasticity_connect", "plasticity_status",
+    "plasticity_current_selection", "plasticity_list_bodies", "plasticity_body_info",
+    "plasticity_capture_snapshot", "plasticity_changes_since", "plasticity_reconcile",
+    "plasticity_screenshot",
+  ]));
+  assert.equal(listed.tools[0]?.name, "plasticity_call");
+
+  const catalogResponse = await client.callTool({ name: "plasticity_call", arguments: {
+    toolName: "catalog", query: "plasticity_create_box",
+  } });
+  assert.equal(catalogResponse.isError, undefined);
+  const catalog = parseToolJson(catalogResponse);
+  assert.equal(catalog.total, 1);
+  assert.equal(catalog.tools[0]?.name, "plasticity_create_box");
+
+  const invalid = await client.callTool({ name: "plasticity_call", arguments: {
+    toolName: "plasticity_create_box",
+    arguments: { originMm: [0, 0, 0], sizeMm: [0, 20, 30], revision: "r1" },
+  } });
+  assert.equal(invalid.isError, true);
+  assert.equal(createBoxCalls, 0);
+  const valid = await client.callTool({ name: "plasticity_call", arguments: {
+    toolName: "plasticity_create_box",
+    arguments: { originMm: [0, 0, 0], sizeMm: [10, 20, 30], revision: "r1" },
+  } });
+  assert.equal(valid.isError, undefined);
+  assert.equal(createBoxCalls, 1);
+
   await client.close(); await server.close();
 });
 
