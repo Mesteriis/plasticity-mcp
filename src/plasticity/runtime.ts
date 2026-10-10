@@ -361,8 +361,14 @@ export class PlasticityRuntime {
         ? [vector(active.p), direction(active.n), direction(active.x), direction(active.y)].flat().map(stableNumber).join(',')
         : 'none';
       const viewStateToken = ['workplane', activePlaneId ?? 'unregistered', activeFrameToken].join(':');
-      const bodies = [...this.geo.geometryModel].map(([versionId, item]) => {
-        const bodyType = item.view?.constructor?.name ?? 'Unknown';
+      // Plasticity's kernel binding never frees the native side of topology
+      // wrappers (faces, edges, vertices, collections), even after GC, so
+      // every walk of a large document's topology costs hundreds of MB. A
+      // body version's topology is immutable: read it once per body view
+      // and versionId and reuse it across state reads.
+      const topologyCacheKey = Symbol.for('plasticity-mcp.body-topology');
+      const topologyCache = globalThis[topologyCacheKey] ?? (globalThis[topologyCacheKey] = new WeakMap());
+      const readTopology = (item, bodyType) => {
         const isBrepShell = bodyType === 'Solid' || bodyType === 'Sheet';
         const isWire = bodyType === 'Wire';
         let box = null;
@@ -371,9 +377,6 @@ export class PlasticityRuntime {
             try { box = item.model.FindBox(); } catch {}
           } else box = item.model.FindBox();
         }
-        const key = this.db.nodes?.item2key?.(item.view);
-        const name = key === undefined ? null : (this.db.nodes?.getName?.(key) ?? null);
-        const materialId = key === undefined ? 0 : (this.db.nodes?.getMaterialId?.(key) ?? 0);
         // Wire B-curve segments have their own segmentEntityId API. Some
         // Plasticity rebuild results expose transient high-edge views that are
         // not shell B-Rep topology and can make getBoundingBox throw
@@ -529,6 +532,27 @@ export class PlasticityRuntime {
         const faceIds = Array.from(faceViews?.versionIds ?? []).map(String);
         const edgeIds = Array.from(edgeViews?.versionIds ?? []).map(String);
         return {
+          boundsMm: box ? { min: vector(box.min), max: vector(box.max) } : null,
+          faceIds,
+          edgeIds,
+          faces,
+          edges,
+          vertices: Array.from(verticesById.values()).sort((left, right) => left.id - right.id),
+        };
+      };
+      const bodies = [...this.geo.geometryModel].map(([versionId, item]) => {
+        const bodyType = item.view?.constructor?.name ?? 'Unknown';
+        const view = item.view !== null && typeof item.view === 'object' ? item.view : null;
+        const cached = view ? topologyCache.get(view) : undefined;
+        let topology = cached?.versionId === versionId ? cached.topology : null;
+        if (!topology) {
+          topology = readTopology(item, bodyType);
+          if (view) topologyCache.set(view, { versionId, topology });
+        }
+        const key = this.db.nodes?.item2key?.(item.view);
+        const name = key === undefined ? null : (this.db.nodes?.getName?.(key) ?? null);
+        const materialId = key === undefined ? 0 : (this.db.nodes?.getMaterialId?.(key) ?? 0);
+        return {
           id: this.db.lookupStableId(versionId),
           versionId,
           type: bodyType,
@@ -537,12 +561,7 @@ export class PlasticityRuntime {
           visible: key === undefined ? true : Boolean(this.db.nodes?.isVisible?.(key)),
           hidden: key === undefined ? false : Boolean(this.db.nodes?.isHidden?.(key)),
           locked: key === undefined ? false : Boolean(this.db.nodes?.isLocked?.(key)),
-          boundsMm: box ? { min: vector(box.min), max: vector(box.max) } : null,
-          faceIds,
-          edgeIds,
-          faces,
-          edges,
-          vertices: Array.from(verticesById.values()).sort((left, right) => left.id - right.id),
+          ...topology,
         };
       }).filter(item => Number.isInteger(item.id));
       const materials = this.materials.list().map(([id, info]) => {
