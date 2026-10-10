@@ -88,7 +88,10 @@ export async function measureSolidProperties(
 }
 
 async function collectNativeProperties(runtime: PlasticityRuntime, ids: number[]): Promise<NativeSolidProperties[]> {
-  return await runtime.read<NativeSolidProperties[]>(`function (args) {
+  return await runtime.readNative<NativeSolidProperties[]>(`function (pk_default, args) {
+    // The body collection's own centroid is the centre of its bounding box;
+    // the kernel's Eval.MassProperties answers the centre of volume.
+    const evaluator = new pk_default.a.Eval(pk_default.a.Context.Get());
     const find = id => {
       const matches = [];
       for (const [versionId, item] of this.geo.geometryModel) {
@@ -109,17 +112,22 @@ async function collectNativeProperties(runtime: PlasticityRuntime, ids: number[]
       if (amounts.length !== 1 || peripheries.length !== 1) {
         throw new Error('Unexpected native mass-property result shape: ' + id);
       }
-      const centroid = collection.GetCentroid();
+      const mass = evaluator.MassProperties(Int32Array.of(item.model.Id()), Float64Array.of(1));
+      const centroid = Array.from(mass?.centroids ?? [], Number);
+      const errors = Array.from(mass?.errors ?? [], Number);
+      if (mass?.ok !== 1 || errors.some(code => code !== 0) || centroid.length !== 3) {
+        throw new Error('Native volume centroid evaluation failed: ' + id);
+      }
       return {
         id,
         versionId: Number(versionId),
         volumeM3: amounts[0],
         surfaceAreaM2: peripheries[0],
-        centroidM: [Number(centroid.x), Number(centroid.y), Number(centroid.z)],
+        centroidM: centroid,
         nativeCheckCodes: Array.from(item.model.Check(), Number),
       };
     });
-  }`, [{ ids }]);
+  }`, ["pk_default"], [{ ids }]);
 }
 
 function validateCurrentSolids(state: RuntimeState, ids: number[]): Map<number, RuntimeState["bodies"][number]> {

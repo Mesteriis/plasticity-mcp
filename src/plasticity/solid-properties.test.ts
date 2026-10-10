@@ -8,11 +8,13 @@ import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
 test("returns exact native B-Rep volume, surface area, and volume centroid", async () => {
   const state = runtimeState();
   let source = "";
+  let bindings: string[] = [];
   let arguments_: unknown;
   const runtime = {
     async getState() { return state; },
-    async read(source_: string, values: unknown[]) {
+    async readNative(source_: string, bindings_: string[], values: unknown[]) {
       source = source_;
+      bindings = bindings_;
       arguments_ = values[0];
       return [native(7, 17, 1e-6, 0.0007, [0.02, 0.025, 0.0325])];
     },
@@ -38,18 +40,87 @@ test("returns exact native B-Rep volume, surface area, and volume centroid", asy
     surfaceAreaMm2: 700,
     volumeWeightedCentroidMm: [20, 25, 32.5],
   });
+  assert.deepEqual(bindings, ["pk_default"]);
   assert.deepEqual(arguments_, { ids: [7] });
   assert.match(source, /lookupBodyCollection\(\[versionId\]\)/);
   assert.match(source, /EvaluateMassProperties/);
-  assert.match(source, /GetCentroid/);
+  assert.match(source, /\.MassProperties\(/);
+  assert.doesNotMatch(source, /GetCentroid/);
   assert.doesNotMatch(source, /mesh|boundingBox|this\.exec|commit\(/i);
+});
+
+test("takes the volume centroid from native mass properties, not the bounding-box centre", async () => {
+  // An L-shaped 1000 mm³ Solid whose box is [0,0,0]-[0.02,0.02,0.005] m: the
+  // collection's GetCentroid() answers the box centre, the kernel's mass
+  // properties answer the real centre of volume.
+  const massCalls: unknown[][] = [];
+  class Solid {}
+  class Eval {
+    context: unknown;
+    constructor(context: unknown) { this.context = context; }
+    MassProperties(topologyIds: Int32Array, densities: Float64Array) {
+      massCalls.push([this.context, Array.from(topologyIds), Array.from(densities)]);
+      return { amountSum: 1e-6, massSum: 1e-6, peripherySum: 0.0007, centroids: Float64Array.of(0.0075, 0.0075, 0.0025), centroidAvg: Float64Array.of(0.0075, 0.0075, 0.0025), errors: Int32Array.of(0), ok: 1 };
+    }
+  }
+  const pk_default = { a: { Eval, Context: { Get: () => "kernel-context" } } };
+  const editor = {
+    geo: { geometryModel: new Map([[17, { view: new Solid(), model: { Id: () => 4242, Check: () => [] } }]]) },
+    db: {
+      lookupStableId: (versionId: number) => (versionId === 17 ? 7 : undefined),
+      lookupBodyCollection: () => ({
+        Size: () => 1,
+        EvaluateMassProperties: () => ({ amounts: Float64Array.of(1e-6), peripheries: Float64Array.of(0.0007) }),
+        GetCentroid: () => ({ x: 0.01, y: 0.01, z: 0.0025 }),
+      }),
+    },
+  };
+  const runtime = {
+    async getState() { return runtimeState(); },
+    async readNative(source: string, bindings: string[], values: unknown[]) {
+      const natives: Record<string, unknown> = { pk_default };
+      const execute = new Function(`return (${source})`)() as (...args: unknown[]) => unknown;
+      return execute.apply(editor, [...bindings.map((name) => natives[name]), ...values]);
+    },
+  } as unknown as PlasticityRuntime;
+
+  const evidence = await measureSolidProperties(runtime, [7], "r1", "session-1");
+
+  assert.deepEqual(evidence.bodies[0]?.volumeCentroidMm, [7.5, 7.5, 2.5]);
+  assert.equal(evidence.bodies[0]?.volumeMm3, 1000);
+  assert.deepEqual(massCalls, [["kernel-context", [4242], [1]]]);
+});
+
+test("rejects a failed native centroid evaluation", async () => {
+  class Solid {}
+  for (const result of [
+    { centroids: Float64Array.of(0, 0, 0), errors: Int32Array.of(-1), ok: 0 },
+    { centroids: Float64Array.of(0, 0), errors: Int32Array.of(0), ok: 1 },
+  ]) {
+    const pk_default = { a: { Eval: class { MassProperties() { return result; } }, Context: { Get: () => ({}) } } };
+    const editor = {
+      geo: { geometryModel: new Map([[17, { view: new Solid(), model: { Id: () => 1, Check: () => [] } }]]) },
+      db: {
+        lookupStableId: () => 7,
+        lookupBodyCollection: () => ({ Size: () => 1, EvaluateMassProperties: () => ({ amounts: [1e-6], peripheries: [0.0007] }) }),
+      },
+    };
+    const runtime = {
+      async getState() { return runtimeState(); },
+      async readNative(source: string, _bindings: string[], values: unknown[]) {
+        const execute = new Function(`return (${source})`)() as (...args: unknown[]) => unknown;
+        return execute.apply(editor, [pk_default, ...values]);
+      },
+    } as unknown as PlasticityRuntime;
+    await assert.rejects(measureSolidProperties(runtime, [7], "r1", "session-1"), /centroid/i);
+  }
 });
 
 test("aggregates multiple exact solids without losing requested order", async () => {
   const state = runtimeState();
   const runtime = {
     async getState() { return state; },
-    async read() {
+    async readNative() {
       return [
         native(8, 18, 3e-6, 0.001, [0.04, 0.02, 0.01]),
         native(7, 17, 1e-6, 0.0007, [0.02, 0.025, 0.0325]),
@@ -78,7 +149,7 @@ test("rejects stale, duplicate, unknown and non-Solid references before native w
     let reads = 0;
     const runtime = {
       async getState() { return state; },
-      async read() { reads += 1; return []; },
+      async readNative() { reads += 1; return []; },
     } as unknown as PlasticityRuntime;
     await assert.rejects(measureSolidProperties(runtime, ids, revision, "session-1"));
     assert.equal(reads, 0);
@@ -96,7 +167,7 @@ test("rejects invalid native measurements instead of substituting mesh estimates
     const state = runtimeState();
     const runtime = {
       async getState() { return state; },
-      async read() { return [result]; },
+      async readNative() { return [result]; },
     } as unknown as PlasticityRuntime;
     await assert.rejects(measureSolidProperties(runtime, [7], "r1", "session-1"));
   }
@@ -113,7 +184,7 @@ test("discards results when the persistent document changes during measurement",
     let stateReads = 0;
     const runtime = {
       async getState() { stateReads += 1; return stateReads === 1 ? runtimeState() : { ...runtimeState(), ...changed }; },
-      async read() { return [native(7, 17, 1e-6, 0.0007, [0.02, 0.025, 0.0325])]; },
+      async readNative() { return [native(7, 17, 1e-6, 0.0007, [0.02, 0.025, 0.0325])]; },
     } as unknown as PlasticityRuntime;
     await assert.rejects(measureSolidProperties(runtime, [7], "r1", "session-1"), /changed during/i);
   }
@@ -123,7 +194,7 @@ test("PlasticityOperations binds exact solid properties to its owned session", a
   const state = runtimeState();
   const runtime = {
     async getState() { return state; },
-    async read() { return [native(7, 17, 1e-6, 0.0007, [0.02, 0.025, 0.0325])]; },
+    async readNative() { return [native(7, 17, 1e-6, 0.0007, [0.02, 0.025, 0.0325])]; },
   } as unknown as PlasticityRuntime;
   const operations = new PlasticityOperations(runtime, "owned-session");
 
