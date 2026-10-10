@@ -2034,7 +2034,10 @@ Sanitized evidence is at
 Plasticity 26.1.3 resolves a public revision-bound face ID to a one-item native
 `FaceCollection` through `Database.lookupFaceCollection`. Its
 `EvaluateMassProperties()` result contains the exact trimmed area and full
-boundary length, while `GetCentroid()` returns the area centroid. `Face.Check`,
+boundary length. The collection's `GetCentroid()` is only the centre of the
+face's bounding box, so the area centroid comes from the kernel's
+`Eval.MassProperties` (an `Eval` built on `Context.Get()`, called with the
+face's topology id and unit density). `Face.Check`,
 `GetLoops`, and `GetInnerLoops` supply native validity and explicit trim-loop
 counts. This path does not use display-mesh triangles or bounds.
 

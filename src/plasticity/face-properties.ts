@@ -103,7 +103,10 @@ export async function measureFaceProperties(
 }
 
 async function collectNativeProperties(runtime: PlasticityRuntime, faces: FaceReference[]): Promise<NativeFaceProperties[]> {
-  return await runtime.read<NativeFaceProperties[]>(`function (args) {
+  return await runtime.readNative<NativeFaceProperties[]>(`function (pk_default, args) {
+    // The face collection's own centroid is the centre of its bounding box;
+    // the kernel's Eval.MassProperties answers the centre of area.
+    const evaluator = new pk_default.a.Eval(pk_default.a.Context.Get());
     const find = reference => {
       const matches = [];
       for (const [versionId, item] of this.geo.geometryModel) {
@@ -132,7 +135,12 @@ async function collectNativeProperties(runtime: PlasticityRuntime, faces: FaceRe
       if (amounts.length !== 1 || peripheries.length !== 1) {
         throw new Error('Unexpected native face mass-property result shape: ' + reference.bodyId + ':' + reference.faceId);
       }
-      const centroid = collection.GetCentroid();
+      const mass = evaluator.MassProperties(Int32Array.of(entityId), Float64Array.of(1));
+      const centroid = Array.from(mass?.centroids ?? [], Number);
+      const errors = Array.from(mass?.errors ?? [], Number);
+      if (mass?.ok !== 1 || errors.some(code => code !== 0) || centroid.length !== 3) {
+        throw new Error('Native face area centroid evaluation failed: ' + reference.bodyId + ':' + reference.faceId);
+      }
       return {
         face: reference,
         bodyVersionId: Number(versionId),
@@ -141,13 +149,13 @@ async function collectNativeProperties(runtime: PlasticityRuntime, faces: FaceRe
         planar: Boolean(face.IsPlanar()),
         areaM2: amounts[0],
         boundaryLengthM: peripheries[0],
-        areaCentroidM: [Number(centroid.x), Number(centroid.y), Number(centroid.z)],
+        areaCentroidM: centroid,
         loopCount: Number(face.GetLoops().length),
         innerLoopCount: Number(face.GetInnerLoops().length),
         nativeCheckCodes: Array.from(face.Check(), Number),
       };
     });
-  }`, [{ faces }]);
+  }`, ["pk_default"], [{ faces }]);
 }
 
 function validateCurrentFaces(

@@ -7,11 +7,13 @@ import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
 test("returns exact native B-Rep area, boundary length, loops, and area centroid", async () => {
   const state = runtimeState();
   let source = "";
+  let bindings: string[] = [];
   let arguments_: unknown;
   const runtime = {
     async getState() { return state; },
-    async read(source_: string, values: unknown[]) {
+    async readNative(source_: string, bindings_: string[], values: unknown[]) {
       source = source_;
+      bindings = bindings_;
       arguments_ = values[0];
       return [native({ bodyId: 7, faceId: "17f1" }, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0])];
     },
@@ -30,20 +32,102 @@ test("returns exact native B-Rep area, boundary length, loops, and area centroid
   assert.deepEqual(evidence.totals, {
     areaMm2: 200, summedBoundaryLengthMm: 60, areaWeightedCentroidMm: [10, 5, 0],
   });
+  assert.deepEqual(bindings, ["pk_default"]);
   assert.deepEqual(arguments_, { faces: [{ bodyId: 7, faceId: "17f1" }] });
   assert.match(source, /lookupFaceCollection\(\[reference\.faceId\]\)/u);
   assert.match(source, /EvaluateMassProperties/u);
-  assert.match(source, /GetCentroid/u);
+  assert.match(source, /\.MassProperties\(/u);
+  assert.doesNotMatch(source, /GetCentroid/u);
   assert.match(source, /face\.GetLoops\(\)\.length/u);
   assert.match(source, /face\.GetInnerLoops\(\)\.length/u);
   assert.doesNotMatch(source, /mesh|boundingBox|this\.exec|commit\(/iu);
+});
+
+test("takes the area centroid from native mass properties, not the bounding-box centre", async () => {
+  // An L-shaped 300 mm² face whose box is [0,0,0]-[0.02,0.02,0] m: the
+  // collection's GetCentroid() answers the box centre, the kernel's mass
+  // properties answer the real centre of area.
+  const massCalls: unknown[][] = [];
+  class Solid {}
+  class Eval {
+    context: unknown;
+    constructor(context: unknown) { this.context = context; }
+    MassProperties(topologyIds: Int32Array, densities: Float64Array) {
+      massCalls.push([this.context, Array.from(topologyIds), Array.from(densities)]);
+      return { amountSum: 3e-4, massSum: 3e-4, peripherySum: 0.08, centroids: Float64Array.of(0.0075, 0.0075, 0), centroidAvg: Float64Array.of(0.0075, 0.0075, 0), errors: Int32Array.of(0), ok: 1 };
+    }
+  }
+  const pk_default = { a: { Eval, Context: { Get: () => "kernel-context" } } };
+  const body = { Id: () => 900 };
+  const face = {
+    Id: () => 101,
+    GetBody: () => body,
+    GetSurface: () => ({ surface: { constructor: { name: "Plane" } } }),
+    IsPlanar: () => true,
+    GetLoops: () => [{}],
+    GetInnerLoops: () => [],
+    Check: () => [],
+  };
+  const editor = {
+    geo: { geometryModel: new Map([[17, { view: Object.assign(new Solid(), { high: { faces: { versionIds: ["17f1"], get: () => ({ entityId: 101 }) } } }), model: body }]]) },
+    db: {
+      lookupStableId: (versionId: number) => (versionId === 17 ? 7 : undefined),
+      lookupFaceCollection: () => ({
+        Size: () => 1,
+        Get: () => face,
+        EvaluateMassProperties: () => ({ amounts: Float64Array.of(3e-4), peripheries: Float64Array.of(0.08) }),
+        GetCentroid: () => ({ x: 0.01, y: 0.01, z: 0 }),
+      }),
+    },
+  };
+  const runtime = {
+    async getState() { return runtimeState(); },
+    async readNative(source: string, bindings: string[], values: unknown[]) {
+      const natives: Record<string, unknown> = { pk_default };
+      const execute = new Function(`return (${source})`)() as (...args: unknown[]) => unknown;
+      return execute.apply(editor, [...bindings.map((name) => natives[name]), ...values]);
+    },
+  } as unknown as PlasticityRuntime;
+
+  const evidence = await measureFaceProperties(runtime, [{ bodyId: 7, faceId: "17f1" }], "r1", "session-1");
+
+  assert.deepEqual(evidence.faces[0]?.areaCentroidMm, [7.5, 7.5, 0]);
+  assert.equal(evidence.faces[0]?.areaMm2, 300);
+  assert.deepEqual(massCalls, [["kernel-context", [101], [1]]]);
+});
+
+test("rejects a failed native face centroid evaluation", async () => {
+  class Solid {}
+  for (const result of [
+    { centroids: Float64Array.of(0, 0, 0), errors: Int32Array.of(-1), ok: 0 },
+    { centroids: Float64Array.of(0, 0), errors: Int32Array.of(0), ok: 1 },
+  ]) {
+    const pk_default = { a: { Eval: class { MassProperties() { return result; } }, Context: { Get: () => ({}) } } };
+    const body = { Id: () => 900 };
+    const face = { Id: () => 101, GetBody: () => body };
+    const editor = {
+      geo: { geometryModel: new Map([[17, { view: Object.assign(new Solid(), { high: { faces: { versionIds: ["17f1"], get: () => ({ entityId: 101 }) } } }), model: body }]]) },
+      db: {
+        lookupStableId: () => 7,
+        lookupFaceCollection: () => ({ Size: () => 1, Get: () => face, EvaluateMassProperties: () => ({ amounts: [3e-4], peripheries: [0.08] }) }),
+      },
+    };
+    const runtime = {
+      async getState() { return runtimeState(); },
+      async readNative(source: string, _bindings: string[], values: unknown[]) {
+        const execute = new Function(`return (${source})`)() as (...args: unknown[]) => unknown;
+        return execute.apply(editor, [pk_default, ...values]);
+      },
+    } as unknown as PlasticityRuntime;
+    await assert.rejects(measureFaceProperties(runtime, [{ bodyId: 7, faceId: "17f1" }], "r1", "session-1"), /centroid/i);
+  }
 });
 
 test("aggregates multiple exact faces in requested order", async () => {
   const state = runtimeState();
   const runtime = {
     async getState() { return state; },
-    async read() {
+    async readNative() {
       return [
         native({ bodyId: 8, faceId: "18f2" }, 18, 202, 1e-4, 0.04, [0.04, 0.01, 0]),
         native({ bodyId: 7, faceId: "17f1" }, 17, 101, 3e-4, 0.08, [0, 0.02, 0]),
@@ -80,7 +164,7 @@ test("rejects stale, duplicate, unknown, and non-shell face references before na
     let reads = 0;
     const runtime = {
       async getState() { return state; },
-      async read() { reads += 1; return []; },
+      async readNative() { reads += 1; return []; },
     } as unknown as PlasticityRuntime;
     await assert.rejects(measureFaceProperties(runtime, faces, revision, "session-1"));
     assert.equal(reads, 0);
@@ -99,7 +183,7 @@ test("rejects invalid native face properties", async () => {
   for (const result of invalid) {
     const state = runtimeState();
     const runtime = {
-      async getState() { return state; }, async read() { return [result]; },
+      async getState() { return state; }, async readNative() { return [result]; },
     } as unknown as PlasticityRuntime;
     await assert.rejects(measureFaceProperties(runtime, [reference], "r1", "session-1"));
   }
@@ -113,7 +197,7 @@ test("discards face-property results when the persistent document changes", asyn
     let stateReads = 0;
     const runtime = {
       async getState() { stateReads += 1; return stateReads === 1 ? runtimeState() : { ...runtimeState(), ...changed }; },
-      async read() { return [native({ bodyId: 7, faceId: "17f1" }, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0])]; },
+      async readNative() { return [native({ bodyId: 7, faceId: "17f1" }, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0])]; },
     } as unknown as PlasticityRuntime;
     await assert.rejects(measureFaceProperties(runtime, [{ bodyId: 7, faceId: "17f1" }], "r1", "session-1"), /changed during/iu);
   }
