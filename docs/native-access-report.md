@@ -1414,6 +1414,17 @@ document. No mass was returned because no physical density was supplied.
 Sanitized evidence is at
 `[local acceptance artifact omitted]`.
 
+The 2026-10-11 regression acceptance additionally built an L-shaped union
+from that box and a 5 × 10 × 15 mm box at [10,20,35] mm. Its 1750 mm³ volume
+and centroid [16.785714285714285,25,36.785714285714285] mm matched analytical
+volume weighting within 1e-6 mm. A radius-1 mm through-hole at [12.5,25]
+removed 20π mm³ and moved the centroid to
+[16.945318632677548,25,36.666011025491834] mm, also within 1e-6 mm of the
+analytical subtraction. Both calls preserved document state and passed native
+checks. Reverting only the centroid adapter to `GetCentroid()` made the same
+native L-shape test fail (x = 20 mm). Cleanup restored the empty scene.
+Run `npm run accept:solid-properties -- --target ID --allow-disposable-mutations --output NEW_DIRECTORY`.
+
 ## Matched printable rounded threads
 
 Plasticity 26.1.3 does not expose a `ThreadFactory` in the renderer used by the
@@ -2054,6 +2065,32 @@ restored the initial empty scene. Aggregate boundary length is documented as a
 per-face sum, so shared boundaries are deliberately counted once per selected
 face. Sanitized evidence is at
 `[local acceptance artifact omitted]`.
+
+The 2026-10-11 regression acceptance moved the hole centre to [5,5] mm.
+Area and boundary length stayed the same; the exact native area centroid became
+[10.335221877086532,5,5] mm, matching the analytical removed-area formula
+within 1e-8 mm. The script resolves topology through `plasticity_body_info`
+because mutation responses contain compact body summaries. Read-only state
+checks and empty-scene cleanup passed. Reverting only the centroid adapter to
+`GetCentroid()` made the same test fail (x = 10 mm).
+Run `npm run accept:native-face-properties -- --target ID --allow-disposable-mutations --output NEW_DIRECTORY`.
+
+## Body topology cache regression acceptance
+
+`getState()` caches serialized topology in a renderer-side WeakMap keyed by
+body view identity and version ID. Names, materials and visibility remain live.
+On Plasticity 26.1.3, the guarded 2026-10-11 native regression compared cached
+reads with fresh native topology walks after box creation, renaming, movement,
+Undo/Redo, linked-instance creation, editing a source face, and reopening a
+saved document. All eight stages agreed, including full face/edge/vertex
+geometry and instance descriptors. The test restored an empty document.
+
+Run `npm run accept:native-topology-cache -- --target ID --allow-disposable-mutations --output NEW_DIRECTORY`.
+The command requires an empty disposable document, takes window ownership, saves
+an initial copy, and backs up the fixture before reopening documents. It does
+not automatically undo an uncertain mutation. This small-fixture correctness
+check is not a replication of the contributor's 486-body memory benchmark and
+does not establish that the upstream native wrapper leak itself is fixed.
 
 ## Native STL/OBJ reference-mesh import
 

@@ -180,4 +180,23 @@ test("reads a body version's native topology once and reuses it until the body c
   geometryModel.set(22, makeItem());
   await runtime.getState();
   assert.deepEqual(calls, { FindBox: 3, GetFaces: 3, GetEdges: 3 }, "a new view rereads the topology");
+
+  const replacement = geometryModel.get(22)!;
+  geometryModel.clear();
+  geometryModel.set(21, item);
+  await runtime.getState();
+  assert.deepEqual(calls, { FindBox: 4, GetFaces: 4, GetEdges: 4 }, "Undo to an older version on a reused view rereads it");
+  geometryModel.clear();
+  geometryModel.set(22, replacement);
+  await runtime.getState();
+  assert.deepEqual(calls, { FindBox: 4, GetFaces: 4, GetEdges: 4 }, "Redo can reuse the still-current cached replacement view");
+
+  editor.document.uuid = "document-2";
+  geometryModel.set(22, makeItem());
+  editor.db.nodes.getMaterialId = () => 3;
+  editor.db.nodes.isVisible = () => false;
+  const reopened = await runtime.getState();
+  assert.deepEqual(calls, { FindBox: 5, GetFaces: 5, GetEdges: 5 }, "a reopened document with reused numeric IDs and new views rereads topology");
+  assert.equal(reopened.bodies[0]?.materialId, 3);
+  assert.equal(reopened.bodies[0]?.visible, false);
 });

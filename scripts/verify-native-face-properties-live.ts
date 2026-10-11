@@ -35,7 +35,7 @@ const HELP = `Usage:
   node scripts/verify-native-face-properties-live.ts --help
   node scripts/verify-native-face-properties-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
-Live mode refuses a nonempty Plasticity document, cuts a centered hole through a
+Live mode refuses a nonempty Plasticity document, cuts an offset hole through a
 disposable box, measures exact native properties of its trimmed top face, proves
 the measurement is read-only, restores the empty document, and writes evidence.`;
 
@@ -60,18 +60,19 @@ async function main(): Promise<void> {
     const box = state.bodies.find((body: any) => body.name === "Face properties box" && body.type === "Solid");
     requireCondition(Number.isInteger(box?.id), "Disposable box is unavailable");
     state = await call(live.client, "plasticity_create_cylinder", {
-      centerMm: [10, 5, -1], radiusMm: 2, heightMm: 7, axis: [0, 0, 1], name: "Face properties cutter",
+      centerMm: [5, 5, -1], radiusMm: 2, heightMm: 7, axis: [0, 0, 1], name: "Face properties cutter",
       intent: "Approved disposable native face-properties cutter", revision: state.revision,
     });
     const cutter = state.bodies.find((body: any) => body.name === "Face properties cutter" && body.type === "Solid");
     requireCondition(Number.isInteger(cutter?.id), "Disposable cylinder cutter is unavailable");
     state = await call(live.client, "plasticity_boolean", {
       targetIds: [box.id], toolIds: [cutter.id], operation: "difference", keepTools: false,
-      intent: "Create a centered trimmed planar face for native face-property acceptance", revision: state.revision,
+      intent: "Create an asymmetric trimmed planar face for native face-property acceptance", revision: state.revision,
     });
     const result = state.bodies.find((body: any) => body.type === "Solid");
     requireCondition(result && state.bodies.filter((body: any) => body.type === "Solid").length === 1, "Holed result Solid is unavailable");
-    const top = result.faces.find((face: any) => face.planar && Math.abs(face.centerMm[2] - 5) <= 1e-8 && face.normal[2] > 0.999999);
+    const detailedResult = await call(live.client, "plasticity_body_info", { id: result.id });
+    const top = detailedResult.body.faces.find((face: any) => face.planar && Math.abs(face.centerMm[2] - 5) <= 1e-8 && face.normal[2] > 0.999999);
     requireCondition(top, "Trimmed top face is unavailable");
     const beforeMeasurement = stateSummary(state);
     const report = await call(live.client, "plasticity_measure_face_properties", {
@@ -84,7 +85,7 @@ async function main(): Promise<void> {
     requireCondition(measured.surfaceType === "Plane" && measured.planar === true, "Measured face is not the expected native Plane");
     near(measured.areaMm2, 200 - Math.PI * 4, 1e-6, "trimmed face area");
     near(measured.boundaryLengthMm, 60 + Math.PI * 4, 1e-6, "trimmed face boundary length");
-    vectorNear(measured.areaCentroidMm, [10, 5, 5], 1e-8, "trimmed face area centroid");
+    vectorNear(measured.areaCentroidMm, [(200 * 10 - Math.PI * 4 * 5) / (200 - Math.PI * 4), 5, 5], 1e-8, "asymmetric trimmed face area centroid");
     requireCondition(measured.loopCount === 2 && measured.innerLoopCount === 1, "Trimmed face did not expose one outer and one inner loop");
     requireCondition(measured.nativeCheckCodes.length === 0, "Measured face failed native validation");
     near(report.totals.areaMm2, measured.areaMm2, 1e-9, "total face area");

@@ -48,7 +48,8 @@ const HELP = `Usage:
   node scripts/verify-native-solid-properties-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
 With no arguments or --help, this command performs no connection and no mutation.
-Live mode refuses a nonempty Plasticity document, never chooses a window
+Live mode measures a box, an L-shaped union and an offset through-hole.
+It refuses a nonempty Plasticity document, never chooses a window
 automatically, cleans up with native Undo, and writes sanitized evidence.`;
 
 async function main(): Promise<void> {
@@ -95,6 +96,49 @@ async function main(): Promise<void> {
     requireCondition(report.bodies[0].nativeCheckCodes.length === 0, "Measured Solid failed native validation");
     requireCondition(!("massG" in report) && !("massG" in report.bodies[0]), "Geometry measurement invented a physical mass without density");
     evidence.solidProperties = { report, persistentDocumentUnchanged: true, physicalDensityRequiredSeparately: true };
+
+    state = await call(live.client, "plasticity_create_box", {
+      originMm: [10, 20, 35], sizeMm: [5, 10, 15], name: "Asymmetric solid extension",
+      intent: "Create an asymmetric volume-centroid regression fixture", revision: state.revision,
+    });
+    const extension = state.bodies.find((candidate: any) => candidate.name === "Asymmetric solid extension");
+    requireCondition(Number.isInteger(extension?.id), "Extension Solid is unavailable");
+    state = await call(live.client, "plasticity_boolean", {
+      targetIds: [body.id], toolIds: [extension.id], operation: "union", keepTools: false,
+      intent: "Create the L-shaped centroid fixture", revision: state.revision,
+    });
+    requireCondition(state.bodies.length === 1, "L-shaped fixture did not produce one Solid");
+    const asymmetricId = state.bodies[0].id;
+    const lCentroid = [(1000 * 20 + 750 * 12.5) / 1750, 25, (1000 * 32.5 + 750 * 42.5) / 1750];
+    const lReport = await call(live.client, "plasticity_measure_solid_properties", { ids: [asymmetricId], revision: state.revision });
+    requirePersistentStateEqual(state, await call(live.client, "plasticity_status", {}));
+    near(lReport.bodies[0].volumeMm3, 1750, 1e-6, "L-shaped volume");
+    near(lReport.bodies[0].surfaceAreaMm2, 1150, 1e-6, "L-shaped surface area");
+    vectorNear(lReport.bodies[0].volumeCentroidMm, lCentroid, 1e-6, "L-shaped volume centroid");
+    vectorNear(lReport.totals.volumeWeightedCentroidMm, lCentroid, 1e-6, "L-shaped weighted centroid");
+    evidence.asymmetricSolid = { report: lReport, expectedCentroidMm: lCentroid, persistentDocumentUnchanged: true };
+
+    state = await call(live.client, "plasticity_create_cylinder", {
+      centerMm: [12.5, 25, 29], radiusMm: 1, heightMm: 22, axis: [0, 0, 1], name: "Offset through-hole cutter",
+      intent: "Create the off-centre volume-centroid regression cutter", revision: state.revision,
+    });
+    const cutter = state.bodies.find((candidate: any) => candidate.name === "Offset through-hole cutter");
+    requireCondition(Number.isInteger(cutter?.id), "Through-hole cutter is unavailable");
+    state = await call(live.client, "plasticity_boolean", {
+      targetIds: [asymmetricId], toolIds: [cutter.id], operation: "difference", keepTools: false,
+      intent: "Subtract the offset through-hole", revision: state.revision,
+    });
+    requireCondition(state.bodies.length === 1, "Holed fixture did not produce one Solid");
+    const removedVolume = Math.PI * 20;
+    const holedVolume = 1750 - removedVolume;
+    const holedCentroid = lCentroid.map((value, axis) => (1750 * value - removedVolume * [12.5, 25, 40][axis]!) / holedVolume);
+    const holedReport = await call(live.client, "plasticity_measure_solid_properties", { ids: [state.bodies[0].id], revision: state.revision });
+    requirePersistentStateEqual(state, await call(live.client, "plasticity_status", {}));
+    near(holedReport.bodies[0].volumeMm3, holedVolume, 1e-6, "offset-hole volume");
+    near(holedReport.bodies[0].surfaceAreaMm2, 1150 + 38 * Math.PI, 1e-6, "offset-hole surface area");
+    vectorNear(holedReport.bodies[0].volumeCentroidMm, holedCentroid, 1e-6, "offset-hole volume centroid");
+    vectorNear(holedReport.totals.volumeWeightedCentroidMm, holedCentroid, 1e-6, "offset-hole weighted centroid");
+    evidence.holedSolid = { report: holedReport, expectedCentroidMm: holedCentroid, persistentDocumentUnchanged: true };
 
     while (state.undoDepth > initialState.undoDepth) {
       state = await call(live.client, "plasticity_undo", { intent: "Cleanup disposable native solid-properties acceptance", revision: state.revision });
