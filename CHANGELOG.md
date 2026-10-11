@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2 — Unreleased
+## 0.2.2 — 2026-10-11
 
 - Cache serialized body topology to avoid repeated native-wrapper allocation when reading an unchanged scene; retain live names, visibility and materials and invalidate on geometry/history changes (#2, #3).
 - Return native mass-property centroids for solids and faces instead of bounding-box centers (#1, #4, #5, #6).
