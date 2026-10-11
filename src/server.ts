@@ -1916,7 +1916,7 @@ function createServerWithCatalog(
     ? { root: process.env.PLASTICITY_REFERENCE_ARTIFACT_ROOT }
     : {}),
 ): McpServer {
-  const server = new McpServer({ name: "plasticity-mcp", version: "0.2.1" }, { instructions: PLASTICITY_MCP_INSTRUCTIONS });
+  const server = new McpServer({ name: "plasticity-mcp", version: "0.2.2" }, { instructions: PLASTICITY_MCP_INSTRUCTIONS });
   const strength = suppliedStrength ?? strengthDependenciesForSession(session, {
     analysisUnavailableReason: "The isolated Codex analysis profile was not initialized by this server launcher",
   });
