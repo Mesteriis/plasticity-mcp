@@ -2091,6 +2091,10 @@ an initial copy, and backs up the fixture before reopening documents. It does
 not automatically undo an uncertain mutation. This small-fixture correctness
 check is not a replication of the contributor's 486-body memory benchmark and
 does not establish that the upstream native wrapper leak itself is fixed.
+The subsequent [486-body memory comparison](state-memory-benchmark.md) reproduced
+linear native allocation growth with v0.2.1 and a plateau with the patched
+runtime over 13 reads of a synthetic scene; the contributor's original CAD
+file was unavailable.
 
 ## Native STL/OBJ reference-mesh import
 

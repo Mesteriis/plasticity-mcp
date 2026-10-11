@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "label": "patched-square",
+  "requestedReads": 13,
+  "runtimeSourceSha256": "869c29b9f303d7883673fe68d6cd6300a23e332656a30d395c3acb97b20abd8a",
+  "gcBeforeEveryFootprintSample": true,
+  "coldCacheAtStart": true,
+  "startedAt": "2026-10-11T18:25:33.145Z",
+  "samples": [
+    {
+      "read": 0,
+      "readMs": 0,
+      "jsHeapUsedBytes": 78956276,
+      "footprintBytes": 1697861112,
+      "mallocSmallBytes": 1321369600,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 1,
+      "readMs": 5018.397083,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2141917024,
+      "mallocSmallBytes": 1590624256,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 2,
+      "readMs": 1657.3741659999996,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143342432,
+      "mallocSmallBytes": 1591918592,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 3,
+      "readMs": 1639.3849169999994,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143457120,
+      "mallocSmallBytes": 1592033280,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 4,
+      "readMs": 1581.1348749999997,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143473504,
+      "mallocSmallBytes": 1592033280,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 5,
+      "readMs": 1581.658625,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143473504,
+      "mallocSmallBytes": 1592033280,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 6,
+      "readMs": 1587.7200410000005,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143539040,
+      "mallocSmallBytes": 1592098816,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 7,
+      "readMs": 1597.078542000001,
+      "jsHeapUsedBytes": 157841960,
+      "footprintBytes": 2143555424,
+      "mallocSmallBytes": 1592115200,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 8,
+      "readMs": 1592.1229589999966,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143555424,
+      "mallocSmallBytes": 1592115200,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 9,
+      "readMs": 1611.559167000003,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143555424,
+      "mallocSmallBytes": 1592115200,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 10,
+      "readMs": 1645.8740409999991,
+      "jsHeapUsedBytes": 157841960,
+      "footprintBytes": 2143571808,
+      "mallocSmallBytes": 1592131584,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 11,
+      "readMs": 1619.4366249999985,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143571808,
+      "mallocSmallBytes": 1592131584,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 12,
+      "readMs": 1606.1624159999992,
+      "jsHeapUsedBytes": 157841972,
+      "footprintBytes": 2143604576,
+      "mallocSmallBytes": 1592164352,
+      "mallocSmallSwappedBytes": 5488640
+    },
+    {
+      "read": 13,
+      "readMs": 1597.4466670000002,
+      "jsHeapUsedBytes": 157841960,
+      "footprintBytes": 2143604576,
+      "mallocSmallBytes": 1592164352,
+      "mallocSmallSwappedBytes": 5488640
+    }
+  ],
+  "topology": {
+    "bodies": 486,
+    "faces": 34020,
+    "edges": 99144,
+    "vertices": 66096
+  },
+  "stateSha256": "ea626fd1554e310122318a1af0671581f918909fcd47833685ec3530d17ed8d9",
+  "completed": true,
+  "completedAt": "2026-10-11T18:26:01.778Z",
+  "targetPidAssociation": "externally-verified-via-main-inspector-BrowserWindow-before-run"
+}

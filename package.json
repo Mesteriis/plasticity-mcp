@@ -102,6 +102,7 @@
     "accept:groups": "node scripts/verify-native-groups-live.ts",
     "accept:interference": "node scripts/verify-native-interference-live.ts",
     "accept:native-topology-cache": "node scripts/verify-native-topology-cache-live.ts",
+    "benchmark:native-state-memory": "node scripts/benchmark-native-state-memory.ts",
     "accept:solid-properties": "node scripts/verify-native-solid-properties-live.ts",
     "accept:compact-observation": "node scripts/verify-compact-observation-live.ts",
     "accept:compact-diff-live": "node scripts/verify-compact-diff-live.ts",
