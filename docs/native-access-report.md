@@ -1396,8 +1396,11 @@ evidence is at
 
 Plasticity 26.1.3 exposes a unique native `BodyCollection` for a current Solid
 through the renderer database. `BodyCollection.EvaluateMassProperties()`
-returns the body's volume in m³ and surface area in m²; `GetCentroid()` returns
-the volume centroid in model metres. The adapter converts those results once to
+returns the body's volume in m³ and surface area in m². The collection's
+`GetCentroid()` is only the centre of the body's bounding box, so the volume
+centroid comes from the kernel's `Eval.MassProperties` (an `Eval` built on
+`Context.Get()`, called with the body's topology id and unit density), which
+returns the centre of volume in model metres. The adapter converts those results once to
 mm³, mm², and millimetres, checks `SolidBody.Check()`, and rejects the result if
 the document, revision, history, or persistent body descriptors change while
 the read is in progress. It does not use the render mesh or a bounding box.
