@@ -1972,7 +1972,7 @@ function createServerWithCatalog(
   }).strict();
   rawRegisterTool("plasticity_call", {
     title: "Plasticity tool catalog and dispatcher",
-    description: "Browse the bounded catalog of registered Plasticity MCP operations or invoke one by its exact tool name. Use toolName='catalog' with query/offset/limit to read descriptions and JSON input schemas; set toolName to a returned operation name and pass its arguments object to invoke it. Only registered MCP operations are callable; the selected operation's original Zod schema and safety checks are applied. This is not JavaScript execution.",
+    description: "Browse the bounded catalog of registered Plasticity MCP operations or invoke one by its exact tool name. Use toolName='catalog' with query/offset/limit to read descriptions and JSON input schemas; each query word matches on its own and results are ranked with name matches first; set toolName to a returned operation name and pass its arguments object to invoke it. Only registered MCP operations are callable; the selected operation's original Zod schema and safety checks are applied. This is not JavaScript execution.",
     inputSchema: plasticityCallSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   }, async (rawInput, extra) => {
@@ -1985,10 +1985,27 @@ function createServerWithCatalog(
     }
 
     const query = input.query?.toLocaleLowerCase();
+    // Each query word counts on its own, so "translate move bodies" still finds
+    // plasticity_move; a word that starts a name segment outranks a mention.
+    // "bodies" also matches "body", "holes" also matches "hole"
+    const terms = (query?.split(/\s+/).filter(Boolean) ?? []).map((term) => [...new Set([
+      term,
+      term.length > 3 ? term.replace(/ies$/, "y").replace(/(?<!s)s$/, "") : term,
+    ])]);
+    const score = (candidate: { name: string; description: string }) => {
+      const name = candidate.name.toLocaleLowerCase();
+      const parts = name.split("_");
+      const description = candidate.description.toLocaleLowerCase();
+      return terms.reduce((sum, forms) => sum + (forms.some((form) => parts.some((part) => part.startsWith(form)))
+        ? 2
+        : forms.some((form) => name.includes(form) || description.includes(form)) ? 1 : 0), 0);
+    };
     const matching = [...routedTools.values()]
       .filter((candidate) => candidate.name !== "plasticity_call")
-      .filter((candidate) => !query || candidate.name.toLocaleLowerCase().includes(query) || candidate.description.toLocaleLowerCase().includes(query))
-      .sort((left, right) => left.name.localeCompare(right.name));
+      .map((candidate) => ({ candidate, score: score(candidate) }))
+      .filter((entry) => terms.length === 0 || entry.score > 0)
+      .sort((left, right) => right.score - left.score || left.candidate.name.localeCompare(right.candidate.name))
+      .map((entry) => entry.candidate);
     const page = matching.slice(input.offset, input.offset + input.limit);
     return result({
       total: matching.length,
@@ -3072,7 +3089,7 @@ function createServerWithCatalog(
       ...("plane" in input ? { plane: input.plane } : {}),
     })));
 
-  tool("plasticity_move", "Move bodies. Requires the current revision; delta is millimeters.", z.object({ ids, deltaMm: vector, intent, revision }), async ({ ids: bodyIds, deltaMm, intent: purpose, revision: current }) =>
+  tool("plasticity_move", "Move (translate, shift) current bodies rigidly by one world-space millimeter delta in one Plasticity history step. Requires the current revision; re-read bounds and topology afterward.", z.object({ ids, deltaMm: vector, intent, revision }), async ({ ids: bodyIds, deltaMm, intent: purpose, revision: current }) =>
     await journaled("move", purpose, { bodyIds, deltaMm }, () => session.get().move(bodyIds, deltaMm, current)));
   tool("plasticity_rotate", "Rotate bodies around a world pivot and axis. Angle is degrees.", z.object({ ids, pivotMm: vector, axis: direction, degrees: z.number().finite(), intent, revision }), async ({ ids: bodyIds, pivotMm, axis, degrees, intent: purpose, revision: current }) =>
     await journaled("rotate", purpose, { bodyIds, pivotMm, axis, degrees }, () => session.get().rotate(bodyIds, pivotMm, axis, degrees, current)));
