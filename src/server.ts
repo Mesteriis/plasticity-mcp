@@ -40,7 +40,7 @@ import {
   printedThreadQualificationMatchSchema,
 } from "./printing/thread-qualification.ts";
 import { PLASTICITY_MCP_INSTRUCTIONS } from "./server-instructions.ts";
-import { exposeDirectTool, type ToolCatalogMode } from "./tool-catalog.ts";
+import { catalogScore, exposeDirectTool, type ToolCatalogMode } from "./tool-catalog.ts";
 
 const vector = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 const vector2 = z.tuple([z.number().finite(), z.number().finite()]);
@@ -1985,25 +1985,10 @@ function createServerWithCatalog(
     }
 
     const query = input.query?.toLocaleLowerCase();
-    // Each query word counts on its own, so "translate move bodies" still finds
-    // plasticity_move; a word that starts a name segment outranks a mention.
-    // "bodies" also matches "body", "holes" also matches "hole"
-    const terms = (query?.split(/\s+/).filter(Boolean) ?? []).map((term) => [...new Set([
-      term,
-      term.length > 3 ? term.replace(/ies$/, "y").replace(/(?<!s)s$/, "") : term,
-    ])]);
-    const score = (candidate: { name: string; description: string }) => {
-      const name = candidate.name.toLocaleLowerCase();
-      const parts = name.split("_");
-      const description = candidate.description.toLocaleLowerCase();
-      return terms.reduce((sum, forms) => sum + (forms.some((form) => parts.some((part) => part.startsWith(form)))
-        ? 2
-        : forms.some((form) => name.includes(form) || description.includes(form)) ? 1 : 0), 0);
-    };
     const matching = [...routedTools.values()]
       .filter((candidate) => candidate.name !== "plasticity_call")
-      .map((candidate) => ({ candidate, score: score(candidate) }))
-      .filter((entry) => terms.length === 0 || entry.score > 0)
+      .map((candidate) => ({ candidate, score: query ? catalogScore(query, candidate) : 0 }))
+      .filter((entry) => !query?.trim() || entry.score > 0)
       .sort((left, right) => right.score - left.score || left.candidate.name.localeCompare(right.candidate.name))
       .map((entry) => entry.candidate);
     const page = matching.slice(input.offset, input.offset + input.limit);
