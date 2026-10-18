@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+import { comparePngPixels } from "./png-pixels.ts";
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -205,16 +206,31 @@ async function main(): Promise<void> {
     state = await call(live.client, "plasticity_undo", { intent: "Restore bodies after planar-face acceptance", revision: state.revision });
     vectorNear(bodyById(state, bracketId).boundsMm.min, bracketBounds.min, 0.01, "alignment final restore bracket minimum");
 
+    // The node flags alone can change while the viewport keeps drawing the previous scene, so each
+    // visibility step is also checked against the rendered frame.
+    await call(live.client, "plasticity_set_view", { view: "isometric", fit: true });
+    const shownFrame = await viewportFrame(live.client, join(output, "visibility-shown.png"));
     priorDepth = state.undoDepth;
     state = await call(live.client, "plasticity_set_visibility", {
       bodyIds: [housingBodyId], visible: false, intent: "Verify exact native body visibility", revision: state.revision,
     });
     requireHistoryStep(state, priorDepth, "Hide housing body");
     requireCondition(bodyById(state, housingBodyId).visible === false, "Housing body remains visible");
+    const hiddenFrame = await viewportFrame(live.client, join(output, "visibility-hidden.png"));
+    // The outliner row alone changes well under 0.1% of the window when the viewport stays stale.
+    const hiddenDifference = comparePngPixels(shownFrame, hiddenFrame);
+    requireCondition(hiddenDifference.changedPixelRatio >= 0.002, `Viewport still renders the hidden housing body (changed ${hiddenDifference.changedPixelRatio})`);
     state = await call(live.client, "plasticity_undo", { intent: "Verify visibility Undo", revision: state.revision });
     requireCondition(bodyById(state, housingBodyId).visible === true, "Visibility Undo did not show the housing body");
+    const undoFrame = await viewportFrame(live.client, join(output, "visibility-undo.png"));
+    const undoDifference = comparePngPixels(shownFrame, undoFrame);
+    requireCondition(undoDifference.changedPixelRatio <= 0.0001, `Visibility Undo did not restore the shown viewport (changed ${undoDifference.changedPixelRatio})`);
     state = await call(live.client, "plasticity_redo", { intent: "Verify visibility Redo", revision: state.revision });
     requireCondition(bodyById(state, housingBodyId).visible === false, "Visibility Redo did not hide the housing body");
+    const redoFrame = await viewportFrame(live.client, join(output, "visibility-redo.png"));
+    const redoDifference = comparePngPixels(hiddenFrame, redoFrame);
+    requireCondition(redoDifference.changedPixelRatio <= 0.0001, `Visibility Redo did not restore the hidden viewport (changed ${redoDifference.changedPixelRatio})`);
+    evidence.visibilityFrames = { hidden: hiddenDifference, undo: undoDifference, redo: redoDifference };
 
     priorDepth = state.undoDepth;
     state = await call(live.client, "plasticity_set_locked", {
@@ -430,6 +446,13 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
   return JSON.parse(text);
+}
+
+async function viewportFrame(client: Client, path: string): Promise<Buffer> {
+  // The viewport redraws on the next animation frame after a scene change.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await call(client, "plasticity_screenshot", { path });
+  return await readFile(path);
 }
 
 function toolText(response: unknown): string {

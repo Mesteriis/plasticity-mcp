@@ -2005,6 +2005,11 @@ export class PlasticityOperations {
             if (args.flag === 'visibility') editor.db.nodes.setVisible(key, args.value);
             else editor.db.nodes.setLocked(key, args.value);
           }
+          // Native visibility commands recompute the scene cache (visible, selectable and drawable
+          // lists) and rebuild the render list in their transaction, before history saves the
+          // memento; without both the viewport keeps drawing the previous state.
+          editor.scene.update();
+          editor.renderList.fullRecompute();
         } catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
