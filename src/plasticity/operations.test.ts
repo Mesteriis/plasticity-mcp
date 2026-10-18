@@ -1775,13 +1775,13 @@ test("manages native groups, hierarchy, visibility, and locks through document h
   assert.deepEqual(calls[5]?.bindings, ["DissolveGroupCommand"]);
   assert.match(calls[5]?.source ?? "", /selected\.addGroup\(group\)/);
   assert.deepEqual(calls[6]?.values, [{ flag: "visibility", bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], value: false }]);
-  assert.match(calls[6]?.source ?? "", /db\.nodes\.setVisible/);
   assert.match(calls[6]?.source ?? "", /selection\.selected\.removeAll\(\)/);
-  assert.match(calls[6]?.source ?? "", /setVisible[\s\S]*editor\.scene\.update\(\);\s*editor\.renderList\.fullRecompute\(\)/);
+  assert.match(calls[6]?.source ?? "", /editor\.db\.makeTransaction\(\)[\s\S]*transaction\.makeVisible\(item\)[\s\S]*transaction\.makeInvisible\(item\)[\s\S]*await editor\.db\.commit\(transaction\)/);
+  assert.doesNotMatch(calls[6]?.source ?? "", /db\.nodes\.setVisible/);
   assert.deepEqual(calls[7]?.values, [{ flag: "locked", bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], value: true }]);
-  assert.match(calls[7]?.source ?? "", /db\.nodes\.setLocked/);
   assert.match(calls[7]?.source ?? "", /selection\.selected\.removeAll\(\)/);
-  assert.match(calls[7]?.source ?? "", /setLocked[\s\S]*editor\.scene\.update\(\);\s*editor\.renderList\.fullRecompute\(\)/);
+  assert.match(calls[7]?.source ?? "", /transaction\.lock\(item\)[\s\S]*transaction\.unlock\(item\)[\s\S]*await editor\.db\.commit\(transaction\)/);
+  assert.doesNotMatch(calls[7]?.source ?? "", /db\.nodes\.setLocked/);
 });
 
 test("rejects stale, missing, duplicate, root, empty, and cyclic group operations before mutation", async () => {

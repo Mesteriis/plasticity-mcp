@@ -1988,11 +1988,11 @@ export class PlasticityOperations {
         return group;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      const keys = [
-        ...args.bodyIds.map(id => this.db.nodes.item2key(find(id))),
-        ...args.instanceIds.map(id => this.db.nodes.item2key(findEmpty(id))),
-        ...args.referenceMeshIds.map(id => this.db.nodes.item2key(findReferenceMesh(id))),
-        ...args.groupIds.map(id => this.db.nodes.item2key(findGroup(id))),
+      const items = [
+        ...args.bodyIds.map(find),
+        ...args.instanceIds.map(findEmpty),
+        ...args.referenceMeshIds.map(findReferenceMesh),
+        ...args.groupIds.map(findGroup),
       ];
       this.selection.selected.removeAll();
       const editor = this;
@@ -2001,15 +2001,18 @@ export class PlasticityOperations {
       command.remember = false;
       command.execute = async function () {
         try {
-          for (const key of keys) {
-            if (args.flag === 'visibility') editor.db.nodes.setVisible(key, args.value);
-            else editor.db.nodes.setLocked(key, args.value);
+          // Like the outliner's ToggleVisibilityCommand, commit a database transaction: its pipeline
+          // updates the node flags, the scene cache and the render list, and builds GPU meshes for
+          // bodies that were hidden since load. Writing the node flags directly skips all of that.
+          const transaction = editor.db.makeTransaction();
+          for (const item of items) {
+            if (args.flag === 'visibility') {
+              if (args.value) transaction.makeVisible(item);
+              else transaction.makeInvisible(item);
+            } else if (args.value) transaction.lock(item);
+            else transaction.unlock(item);
           }
-          // Native visibility commands recompute the scene cache (visible, selectable and drawable
-          // lists) and rebuild the render list in their transaction, before history saves the
-          // memento; without both the viewport keeps drawing the previous state.
-          editor.scene.update();
-          editor.renderList.fullRecompute();
+          await editor.db.commit(transaction);
         } catch (error) { failure = error; throw error; }
       };
       await this.exec(command);

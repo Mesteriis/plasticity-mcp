@@ -1237,7 +1237,17 @@ Group creation and every hierarchy edit run inside Plasticity's command
 history. Names must be assigned inside the same command transaction: assigning
 them after `exec()` advances the document outside the stored memento and can
 lose the name on Undo. Visibility and lock state use the native node database
-inside the same transaction. Runtime state includes these flags for bodies,
+inside the same transaction. Writing the node flags alone leaves the viewport on
+the previous state. The outliner's `ToggleVisibilityCommand` instead builds a
+`db.makeTransaction()` with `makeVisible`/`makeInvisible` (and `lock`/`unlock`
+for locks) and passes it to `db.commit`. The `DatabaseTransformer` pipeline then
+writes the node flags (`UpdateNodes`), runs `SceneVisibilityManager.update`
+(`UpdateSceneCache`) and calls `RenderList.update` with the hidden and unhidden
+items (`UpdateRenderList`), which reaches `GpuMemoryManager.addItem`/`unhideItem`.
+Bodies hidden when a document loads have no GPU face meshes, and only `addItem`
+builds them, so recomputing the scene cache and `RenderList.fullRecompute` alone
+hide bodies but never show ones hidden since load. The adapter commits the same
+transaction inside its history command. Runtime state includes these flags for bodies,
 instances, and groups, and group hierarchy contributes to the document
 revision so stale references are rejected after manual or agent changes.
 `ActivateGroupCommand` changes the native active creation destination in one
