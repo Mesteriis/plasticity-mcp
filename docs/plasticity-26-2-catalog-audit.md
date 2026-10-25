@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-25. The current continuation starts from merged PR #18
-(`0292e51b76b0389535d2d9b7d4071a4abc01764f`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #19
+(`a553ff1f9f05f87145cf1b0b4eeafe56b5925429`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 116 | 124 |
-| Failing or blocked fixtures | 6 | 6 |
-| Tools with success in an application-connected passing fixture | 222 | 264 |
-| Tools attempted only in unaccepted fixtures | 9 | 9 |
-| Tools without a recorded application-connected live call | 140 | 98 |
+| Completed passing fixtures | 123 | 131 |
+| Failing or blocked fixtures | 7 | 7 |
+| Tools with success in an application-connected passing fixture | 229 | 271 |
+| Tools attempted only in unaccepted fixtures | 10 | 10 |
+| Tools without a recorded application-connected live call | 132 | 90 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -447,7 +447,69 @@ in this continuation: UI automation could not acquire the experimental window.
 No focus guard was bypassed. Existing viewport/manual gaps and the strict
 circular-imprint failure remain outside accepted coverage.
 
-Integration validation for this continuation: `npm test` passed 1443 tests,
+Integration validation for the PR #19 continuation: `npm test` passed 1443 tests,
 `npm run typecheck` passed, Workbench passed 90 tests, its typecheck and production
 build. The build retains the advisory warning about chunks larger than 500 kB.
 These checks do not turn the failing or unexecuted live scenarios into passes.
+
+## Joint recipes, vents and cable channels
+
+On 2026-10-26, **7/8 scenarios passed on each experimental copy**. All seven
+positive cases completed native geometry validation, the full Undo/Redo cycle
+and empty-snapshot cleanup. Pin cases that predated the added concentricity
+assertion were repeated successfully; saved successful native reports also
+passed completeness/identity checks for mass and validation results. No
+production adapter change was needed. The cable case remains a strict failure
+as described below.
+
+`npm run accept:native-joints-vents -- --target ID
+--allow-disposable-mutations --case CASE --output NEW_DIRECTORY` selects a
+synthetic, explicitly disposable native recipe fixture. It uses the existing
+isolated-store environment helper and never selects a window automatically.
+
+| Case | Recipe history steps | Nominal native assertions |
+| --- | ---: | --- |
+| `vent-array` | 3 | Six Ø3 through-holes at explicit 3 × 2 centers; 30 × 20 × 5 mm block volume 3000 − 67.5π mm³ |
+| `heat-set-pocket` | 4 | Three-stage Ø3/5/7 pocket, depths 9/6/1 mm in a 20 × 20 × 12 mm block; volume 4800 − 50.25π mm³ |
+| `pin-pair` | 4 | Ø4 pin, height 4 mm, Ø4.4 socket with 0.3 mm axial gap; male/female volumes 3000 + 16π and 6000 − 2.2² × 4.3π mm³ |
+| `pin-pattern` | 6 | Two pins/sockets at explicit centers; double the single-pair volume changes |
+| `snap-fit` | 3 | 10 × 4 × 2 mm beam with 2 × 4 × 1 mm hook, retained editable profile; support plus beam/hook volume 1088 mm³ |
+| `dovetail` | 6 | 6 mm root, 8 mm tip, 4 mm thickness/height, 0.2 mm radial and 0.3 mm axial clearance, two retained profiles; volumes 3112 and 6000 − 7.4 × 4.4 × 4.3 mm³ |
+| `enclosure` | 8 | Rectangular lip/groove on 30 × 20 mm halves, wall 2 mm, lip 1 × 3 mm, clearance 0.2 mm; volumes 3303.75 and 5565.6375 mm³ |
+| `cable-channel` | 2 | Ø4 half-round channel across a 30 × 20 × 10 mm block; nominal volume 6000 − 60π mm³; source Wire retained |
+
+The enclosure groove reaches 3.25 mm above the seam: the explicit 0.25 mm
+cutter overshoot extends past the nominal 3 mm lip height. The fixture checks
+that actual recipe geometry rather than assuming a 3 mm-deep groove.
+
+The runner requires recipe reports to agree with the current document/revision,
+expected history counts, consumed cutters and retained target/profile IDs.
+Solid outputs must pass native validation, measured bounds and mass properties.
+Paired joints must also pass native temporary-body volumetric-interference
+checks. Pin/socket radii, concentric centers and socket bottoms verify the explicit
+geometric clearance. A no-volumetric-interference result alone cannot distinguish
+contact from separation or qualify a physical print fit.
+
+Every passing fixture must Undo the complete recipe to the source snapshot,
+Redo with stable output IDs and recheck geometry, then restore the initial empty
+snapshot. Coordinates/radii use 0.00001 mm and analytic volume uses 0.0001 mm³.
+The cable-channel Boolean uses a native Pipe cutter and an explicit 0.01 mm³
+nominal-volume tolerance. The earlier Pipe fixture returned a B-Spline side,
+so this case is not qualified as an analytic cylindrical surface. These synthetic recipes
+do not prove snap strength, insertion retention, production tolerances or fit.
+The earlier strict STEP and circular-imprint failures retain their tolerances
+and acceptance status; neither is rerun or relabeled by these recipe fixtures.
+
+The cable-channel fixture is **unaccepted on both versions**. Native Check and
+the 0.01 mm³ nominal-volume check passed, but `FindBox` reported a maximum Z of
+10.112742414248142 mm instead of 10 mm on each version, exceeding the retained
+0.00001 mm bounds tolerance. This matches neither a proven physical shape growth
+nor a demonstrated 26.2 adapter regression: native bounding-box behavior for the
+trimmed Pipe surface needs separate investigation. Calls from this failed case
+are excluded from accepted tool coverage. Confirmed recovery restored the empty
+fixture after each failure; no failed or uncertain mutation was resubmitted.
+
+Integration validation for the PR #20 continuation: `npm test` passed 1447 tests,
+`npm run typecheck` passed, Workbench passed 90 tests, its typecheck and production
+build. The build retains its advisory warning about chunks larger than 500 kB.
+Final read-only reconciliation found both experimental documents empty and idle.
