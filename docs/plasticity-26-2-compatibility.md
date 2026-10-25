@@ -95,6 +95,16 @@ mass/bounds do not meet the stated qualification. This was not classified as a
 26.2 adapter regression; tolerances were retained and the matrix records the
 failed case separately.
 
+The next guarded suite covers native bounds and distance measurements, datum
+refresh and the save/open/backup lifecycle on a 10 × 20 × 30 mm Box. Measurement
+reads must preserve revision/history, and stale datum references must never be
+rebound to an unrelated face. Its STEP round-trip retains a strict 0.00001 mm
+nominal-bounds gate; imported kernel bounds expanded by 0.00005 mm per side on
+both versions, so that fixture remains unaccepted and does not establish restart
+provenance/history coverage. The new saved-plane/workplane case was not run
+because UI automation could not acquire the experimental window. See the
+[catalog audit](plasticity-26-2-catalog-audit.md) for completed per-version results.
+
 ## Initial live coverage
 
 The same checkout and production adapter were used against both disposable
