@@ -3563,7 +3563,7 @@ function createServerWithCatalog(
     revision,
   }).strict(), async ({ ids: solidIds, wallThicknessMm, direction: shellDirection, intent: purpose, revision: current }) =>
     await journaled("hollow-solids", purpose, { ids: solidIds, wallThicknessMm, direction: shellDirection }, () => session.get().hollowSolids(solidIds, wallThicknessMm, shellDirection, current)));
-  tool("plasticity_mirror", "Mirror exact bodies across a world-space plane, either copying or moving the originals.", z.object({ ids, planeOriginMm: vector, planeNormal: direction, keepOriginal: z.boolean().default(true), intent, revision }), async ({ ids: bodyIds, planeOriginMm, planeNormal, keepOriginal, intent: purpose, revision: current }) =>
+  tool("plasticity_mirror", "Mirror whole bodies across a world-space plane. keepOriginal=true preserves the sources; false replaces them with reflected bodies. Either mode uses one native history step.", z.object({ ids, planeOriginMm: vector, planeNormal: direction, keepOriginal: z.boolean().default(true), intent, revision }), async ({ ids: bodyIds, planeOriginMm, planeNormal, keepOriginal, intent: purpose, revision: current }) =>
     await journaled("mirror", purpose, { bodyIds, planeOriginMm, planeNormal, keepOriginal }, () => session.get().mirror(bodyIds, planeOriginMm, planeNormal, keepOriginal, current)));
   tool("plasticity_rectangular_pattern", "Create a native rectangular body pattern using counts and center-to-center spacing in millimeters.", z.object({
     ids,

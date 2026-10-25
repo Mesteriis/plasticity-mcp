@@ -65,6 +65,13 @@ sections, fastener workflows and SVG checks. The follow-up fixes hollow-shell un
 26.1 native-open confirmation timeout. The final six-scenario regression passed
 on both versions; the audit does not claim acceptance of all 371 tools.
 
+The next continuation covers patterns, direct rectangle dimensions, Wire
+reversal/unjoin and hole recipes. It also corrects whole-body mirror: native
+`move` is a numeric mirror offset, so replacement mode uses zero offset and a
+source-deletion transaction inside the same command. Copy and replacement are
+checked separately for bodies beside and crossing the mirror plane. The audit
+records the executed cases and their per-version results.
+
 ## Initial live coverage
 
 The same checkout and production adapter were used against both disposable

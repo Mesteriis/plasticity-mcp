@@ -8344,14 +8344,36 @@ export class PlasticityOperations {
     revision: string,
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
+    if (new Set(ids).size !== ids.length) throw new Error("Mirror body IDs must be unique");
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("MirrorCommand")}
-      factory.shells = args.ids.map(find);
+      const originals = args.ids.map(find);
+      const beforeIds = new Set(Array.from(nativeApi.geo.geometryModel.keys(), versionId => nativeApi.db.lookupStableId(versionId)));
+      factory.shells = originals;
       factory.origin.fromArray(args.origin);
       factory.normal.fromArray(args.normal);
-      factory.move = !args.keepOriginal;
-      ${commandEnd}
+      // Native move is a mirror-offset distance, not a copy/replace flag.
+      factory.move = 0;
+      factory.shouldCut = false;
+      factory.shouldUnion = false;
+      const result = await factory.commit();
+      if (!args.keepOriginal) {
+        const reflected = Array.from(nativeApi.geo.geometryModel).filter(([versionId, item]) => {
+          const id = nativeApi.db.lookupStableId(versionId);
+          return Number.isInteger(id) && !beforeIds.has(id)
+            && originals.some(original => original.constructor.name === item.view?.constructor?.name);
+        });
+        if (reflected.length !== originals.length) throw new Error('Mirror did not create one reflected body per source; originals were not deleted');
+        const transaction = nativeApi.db.makeTransaction();
+        for (const original of originals) transaction.delete(original);
+        await nativeApi.db.commit(transaction);
+      }
+      return result;
+    } catch (error) { failure = error; throw error; }
+    };
+    await this.exec(command);
+    if (failure) throw failure;
     }`, ["MirrorFactory"], [{ ids, origin: toMeters(planeOriginMm), normal: planeNormal, keepOriginal }]);
     return await this.state();
   }
