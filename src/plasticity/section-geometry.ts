@@ -1,3 +1,4 @@
+import { nativeFunction } from "./native-function.ts";
 import type { SectionBinding, SectionScenarioInput } from "../strength/section-contracts.ts";
 import {
   integrateSection,
@@ -170,13 +171,13 @@ async function collectNativeSection(
   bodyId: number,
   faceId: string,
 ): Promise<NativeSectionTopology> {
-  return await runtime.readNative<NativeSectionTopology>(`function (args) {
+  return await runtime.readNative<NativeSectionTopology>(nativeFunction`function (args) {
     const mm = value => value * 1000;
     const point = value => [mm(value.x), mm(value.y), mm(value.z)];
     const direction = value => [value.x, value.y, value.z];
     const matches = [];
-    for (const [versionId, item] of this.geo.geometryModel) {
-      if (this.db.lookupStableId(versionId) === args.bodyId) matches.push(item);
+    for (const [versionId, item] of nativeApi.geo.geometryModel) {
+      if (nativeApi.db.lookupStableId(versionId) === args.bodyId) matches.push(item);
     }
     if (matches.length !== 1) {
       return { bodyMatchCount: matches.length, solid: false, checkCodes: [], faceMatchCount: 0, face: null };

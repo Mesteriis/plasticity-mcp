@@ -14,41 +14,75 @@ export interface InspectorClient {
 }
 
 export async function unlockMainProcess(client: InspectorClient, rendererPort: number): Promise<void> {
-  let receivePause: ((params: unknown) => void) | undefined;
-  const paused = new Promise<unknown>((resolve) => { receivePause = resolve; });
-  const unsubscribe = client.on("Debugger.paused", (params) => receivePause?.(params));
+  const pauses: unknown[] = [];
+  let receivePause: (() => void) | undefined;
+  const unsubscribe = client.on("Debugger.paused", (params) => {
+    pauses.push(params);
+    receivePause?.();
+  });
+  let breakpointId: string | undefined;
+  let isPaused = false;
+  const deadline = Date.now() + 10_000;
   try {
     await client.send("Runtime.enable");
     await client.send("Debugger.enable");
+    // Electron 42 may start with an empty main script and never emit the old
+    // entry pause. Instrumentation also stops before the first usable module.
+    const breakpoint = await client.send("Debugger.setInstrumentationBreakpoint", {
+      instrumentation: "beforeScriptExecution",
+    }) as { breakpointId?: string };
+    breakpointId = breakpoint.breakpointId;
+    if (!breakpointId) throw new Error("Plasticity startup instrumentation is unavailable");
     await client.send("Runtime.runIfWaitingForDebugger");
-    const pause = await withTimeout(paused, 10_000, "Plasticity main process did not pause at startup") as {
-      callFrames?: Array<{ callFrameId?: string }>;
-    };
-    const callFrameId = pause.callFrames?.[0]?.callFrameId;
-    if (!callFrameId) throw new Error("Plasticity startup call frame is unavailable");
-    const expression = `(() => {
-      const { app } = process.mainModule.require('electron');
-      const commandLine = app.commandLine;
-      const originalRemoveSwitch = commandLine.removeSwitch.bind(commandLine);
-      commandLine.removeSwitch = name => {
-        if (name === 'remote-debugging-port' || name === 'remote-debugging-pipe') return;
-        return originalRemoveSwitch(name);
-      };
-      commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
-      commandLine.appendSwitch('remote-debugging-port', '${rendererPort}');
-      return { patched: true, port: commandLine.getSwitchValue('remote-debugging-port') };
-    })()`;
-    const evaluation = await client.send("Debugger.evaluateOnCallFrame", {
-      callFrameId,
-      expression,
-      returnByValue: true,
-    }) as { result?: { value?: { patched?: boolean; port?: string } }; exceptionDetails?: unknown };
-    if (evaluation.exceptionDetails || evaluation.result?.value?.patched !== true) {
-      throw new Error("Plasticity rejected the loopback CDP startup hook");
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      if (pauses.length === 0) {
+        await withTimeout(new Promise<void>((resolve) => { receivePause = resolve; }),
+          Math.max(1, deadline - Date.now()), "Plasticity main process did not pause at startup");
+      }
+      const pause = pauses.shift() as { callFrames?: Array<{ callFrameId?: string }> };
+      isPaused = true;
+      const callFrameId = pause.callFrames?.[0]?.callFrameId;
+      if (!callFrameId) throw new Error("Plasticity startup call frame is unavailable");
+      const expression = `(() => {
+        if (typeof process === 'undefined') return { patched: false };
+        let electron;
+        try { if (typeof require === 'function') electron = require('electron'); } catch {}
+        if (!electron?.app) try { electron = process.mainModule?.require('electron'); } catch {}
+        if (!electron?.app) try {
+          electron = process.getBuiltinModule?.('module')?.createRequire(process.execPath)('electron');
+        } catch {}
+        if (!electron?.app) return { patched: false };
+        const { app } = electron;
+        if (app.isReady()) return { patched: false, tooLate: true };
+        const commandLine = app.commandLine;
+        const originalRemoveSwitch = commandLine.removeSwitch.bind(commandLine);
+        commandLine.removeSwitch = name => {
+          if (name === 'remote-debugging-port' || name === 'remote-debugging-pipe') return;
+          return originalRemoveSwitch(name);
+        };
+        commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
+        commandLine.appendSwitch('remote-debugging-port', '${rendererPort}');
+        return { patched: true, port: commandLine.getSwitchValue('remote-debugging-port') };
+      })()`;
+      const evaluation = await client.send("Debugger.evaluateOnCallFrame", {
+        callFrameId, expression, returnByValue: true,
+      }) as { result?: { value?: { patched?: boolean; port?: string; tooLate?: boolean } }; exceptionDetails?: unknown };
+      if (evaluation.exceptionDetails || evaluation.result?.value?.tooLate) {
+        throw new Error("Plasticity rejected the loopback CDP startup hook");
+      }
+      if (evaluation.result?.value?.patched === true) return;
+      if (Date.now() >= deadline) throw new Error("No usable Plasticity startup module was found");
+      await client.send("Debugger.resume");
+      isPaused = false;
     }
-    await client.send("Debugger.resume");
+    throw new Error("No usable Plasticity startup module was found");
   } finally {
     unsubscribe();
+    try {
+      if (breakpointId) await client.send("Debugger.removeBreakpoint", { breakpointId });
+    } finally {
+      if (isPaused) await client.send("Debugger.resume");
+    }
   }
 }
 

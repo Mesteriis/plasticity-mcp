@@ -1,3 +1,4 @@
+import { nativeFunction } from "./native-function.ts";
 import type { SectionBinding } from "../strength/section-contracts.ts";
 import type { SectionLoop, SectionProperties } from "../strength/section-geometry.ts";
 import {
@@ -108,14 +109,14 @@ async function collectNativeArbitrarySection(
   sheet: { originMm: Vector3; extentM: number },
   temporaryIds: TemporaryIds,
 ): Promise<NativeArbitrarySectionTopology> {
-  return await runtime.readNative<NativeArbitrarySectionTopology>(`async function (CutFactory, kernel_Sheet, kernel_Solid, cplane2basis, Vector3, args) {
+  return await runtime.readNative<NativeArbitrarySectionTopology>(nativeFunction`async function (CutFactory, kernel_Sheet, kernel_Solid, cplane2basis, Vector3, args) {
     const mm = value => value * 1000;
     const point = value => [mm(value.x), mm(value.y), mm(value.z)];
     const direction = value => [value.x, value.y, value.z];
     const dot = (left, right) => left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
     const matches = [];
-    for (const [versionId, item] of this.geo.geometryModel) {
-      if (this.db.lookupStableId(versionId) === args.bodyId) matches.push(item);
+    for (const [versionId, item] of nativeApi.geo.geometryModel) {
+      if (nativeApi.db.lookupStableId(versionId) === args.bodyId) matches.push(item);
     }
     if (matches.length !== 1) {
       return { bodyMatchCount: matches.length, solid: false, checkCodes: [], cutBodyCount: 0, cutFaceCount: 0, edges: [] };
@@ -142,8 +143,8 @@ async function collectNativeArbitrarySection(
       x: new Vector3(...x),
       y: new Vector3(...y),
     });
-    const temporary = this.geo.makeTemporary();
-    Object.defineProperty(temporary, 'primaryPartition', { value: this.geo.primaryPartition });
+    const temporary = nativeApi.geo.makeTemporary();
+    Object.defineProperty(temporary, 'primaryPartition', { value: nativeApi.geo.primaryPartition });
     const temporaryDatabase = Object.create(this.db);
     Object.defineProperty(temporaryDatabase, 'geo', { value: temporary });
     const temporaryEditor = Object.create(this);

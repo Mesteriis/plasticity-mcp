@@ -4,7 +4,7 @@
 
 Control Plasticity from an MCP client: inspect and measure native CAD geometry, create and edit models, and export the result. An optional Workbench supports model review, dimensional feedback, and print preparation.
 
-**Runs locally on macOS Apple Silicon with Plasticity 26.1.3.** The MCP server connects to a Plasticity window selected by the user; it cannot run as a standalone cloud CAD service.
+**Runs locally on macOS Apple Silicon with Plasticity 26.1.3, with experimental adapter support for a separately prepared 26.2.1 copy.** The MCP server connects to a Plasticity window selected by the user; it cannot run as a standalone cloud CAD service.
 
 | CAD workflow | What the server provides |
 | --- | --- |
@@ -61,12 +61,25 @@ The launcher does not terminate an existing Plasticity process to add MCP access
 Before starting a new process, the launcher reads the Electron framework's fuse
 configuration. It requires `EnableNodeCliInspectArguments`; builds that disable
 or remove it fail immediately with a compatibility error instead of an inspector
-timeout. Plasticity 26.2.1 was [reported to disable this fuse](https://github.com/Mesteriis/plasticity-mcp/issues/10)
-and is not supported by this startup method. Plasticity 26.1.3 remains the
-live-tested version. An unreadable or unrecognized fuse configuration also stops
-the launch with a diagnostic. An existing loopback CDP session can still be used.
-The check only reads the framework; it does not patch the application or change
-its security settings. See [Electron's fuse documentation](https://www.electronjs.org/docs/latest/tutorial/fuses)
+timeout. The official Plasticity 26.2.1 build disables this fuse, so its
+unmodified bundle remains unsupported by this startup method. An unreadable or
+unrecognized fuse configuration also stops the launch with a diagnostic. The
+check only reads the framework; it does not change application security settings.
+
+The adapter can use a **separately prepared experimental 26.2.1 copy** with an
+available inspector. It handles the Electron 42 startup pause, native binding
+discovery, stores, selection, and changed factory contracts while preserving the
+26.1.3 path. Select that copy explicitly and use a fresh temporary profile:
+
+```sh
+npm run start:plasticity-isolated -- --application /absolute/Experimental/Plasticity.app
+```
+
+Use the returned renderer endpoint as `PLASTICITY_CDP_URL`, then explicitly select
+its window through MCP. The launcher does not prepare, patch, or sign the copy.
+See the [26.2.1 compatibility report](docs/plasticity-26-2-compatibility.md) for the
+security prerequisites, exact live coverage on both versions, and remaining
+validation limits. See [Electron's fuse documentation](https://www.electronjs.org/docs/latest/tutorial/fuses)
 for the inspector flag's behavior.
 
 ### Optional Workbench

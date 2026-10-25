@@ -1,3 +1,4 @@
+import { nativeFunction } from "./native-function.ts";
 import type { CadBinding } from "../strength/contracts.ts";
 import type { PlasticityRuntime } from "./runtime.ts";
 
@@ -191,12 +192,12 @@ export async function inspectRectangularMember(
   if (before.revision !== request.revision) return unsupportedEvidence(binding, ["stale-reference"]);
   if (!before.bodies.some((body) => body.id === request.bodyId)) return unsupportedEvidence(binding, ["unknown-body"]);
 
-  const topology = await runtime.readNative<RectangularTopology | null>(`function (args) {
+  const topology = await runtime.readNative<RectangularTopology | null>(nativeFunction`function (args) {
     const mm = value => value * 1000;
     const point = value => [mm(value.x), mm(value.y), mm(value.z)];
     const direction = value => [value.x, value.y, value.z];
-    for (const [versionId, item] of this.geo.geometryModel) {
-      const bodyId = this.db.lookupStableId(versionId);
+    for (const [versionId, item] of nativeApi.geo.geometryModel) {
+      const bodyId = nativeApi.db.lookupStableId(versionId);
       if (bodyId !== args.bodyId) continue;
       const model = item.model;
       if (!model || typeof model.Check !== 'function') return null;

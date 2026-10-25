@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -165,6 +167,7 @@ async function main(): Promise<void> {
     vectorNear(realizedCopy.boundsMm.max, [50, 40, 5], 0.01, "realized-copy bounds maximum");
     const copiedIds = copied.map((body: { id: number }) => body.id).sort((first: number, second: number) => first - second);
     const validation = await call(live.client, "plasticity_validate_bodies", { ids: copiedIds, revision: state.revision });
+    evidence.independentCopyValidation = validation;
     requireCondition(validation.bodies.length === 2 && validation.bodies.every((body: any) => body.nativeValid === true && body.printableSolid === true && body.nativeCheckCodes.length === 0), "An independent body copy failed native validation");
     state = await call(live.client, "plasticity_undo", { intent: "Verify independent-body duplication Undo", revision: state.revision });
     requireCondition(state.instances.length === 0 && state.bodies.length === 2, "Duplicate Undo did not restore the two source bodies");
@@ -239,7 +242,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }));
 }
 
 function toolText(response: unknown): string {

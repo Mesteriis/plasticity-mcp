@@ -332,14 +332,14 @@ const surfaceFaceRefs = z.array(faceRef).min(1).max(4096).refine(
 );
 const curveControlPointRef = z.discriminatedUnion("kind", [
   z.object({ bodyId: z.number().int().positive(), kind: z.literal("vertex"), pointId: z.number().int().nonnegative() }).strict(),
-  z.object({ bodyId: z.number().int().positive(), kind: z.literal("control-point"), pointId: z.number().int().positive() }).strict(),
+  z.object({ bodyId: z.number().int().positive(), kind: z.literal("control-point"), pointId: z.number().int().nonnegative() }).strict(),
 ]);
 const curveControlPointRefs = z.array(curveControlPointRef).min(1).max(4096).refine(
   (values) => new Set(values.map((value) => `${value.bodyId}:${value.kind}:${value.pointId}`)).size === values.length,
   "Curve control point references must be unique",
 );
 const interiorCurveControlPointRefs = z.array(
-  z.object({ bodyId: z.number().int().positive(), kind: z.literal("control-point"), pointId: z.number().int().positive() }).strict(),
+  z.object({ bodyId: z.number().int().positive(), kind: z.literal("control-point"), pointId: z.number().int().nonnegative() }).strict(),
 ).min(1).max(4096).refine(
   (values) => new Set(values.map((value) => `${value.bodyId}:${value.pointId}`)).size === values.length,
   "Interior curve control point references must be unique",
@@ -2322,7 +2322,7 @@ function createServerWithCatalog(
   tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP.", z.object({}), async () =>
     (await session.windows()).map(({ id, title, url }) => ({ targetId: id, title, url })), true);
   tool("plasticity_diagnose", "Report MCP runtime and reachable Plasticity windows without changing a document.", z.object({}), async () =>
-    ({ node: process.version, platform: process.platform, architecture: process.arch, supportedPlasticity: "26.1.3", endpoint: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223", windows: await session.windows() }), true);
+    ({ node: process.version, platform: process.platform, architecture: process.arch, supportedPlasticity: "26.1.3", experimentalPlasticity: ["26.2.1"], endpoint: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223", windows: await session.windows() }), true);
   tool("plasticity_resolve_fastener_designation", "Interpret a bounded fastening request such as 'крепится на 4 болта M5x10 с гайками' or 'печать винта M6x20 и ответной части'. It defaults to combined strength and geometry intent, parses thread metadata, quantity, selected ISO/DIN head and drive family, explicit joint phrases and fixed/adjustable/pivot intent, and returns one active question package plus compatible Plasticity geometry/strength tools. Its bounded catalog recognizes common hex, socket-cap, button, pan, countersunk and headless set-screw standards with source URLs; set-screw standards also identify flat, truncated-cone, dog, or cup points and require the mating contact function to be resolved. Printed screw, nut, and generic mating-part phrases route to the custom matched-thread tools without importing an ISO pitch. A slot is proposed only for explicit adjustment. It never treats nominal thread diameter as a finished hole, insert pocket, head recess, or nut envelope.", fastenerDesignationInputSchema, async (input) =>
     resolveFastenerDesignation(input), true);
   tool("plasticity_record_printed_thread_qualification", "Persist an immutable physically tested rounded-print-v1 thread fit for one exact printer, material, slicer profile, nozzle, layer height, orientation, and thread definition. Requires explicit confirmation that a real specimen completed full-travel testing; geometric interference checks alone are not accepted. Repeating the same record is idempotent.", printedThreadQualificationInputSchema, async (input) =>
@@ -2672,7 +2672,7 @@ function createServerWithCatalog(
     await journaled("set-locked", purpose, { bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, locked }, () => session.get().setNodeLocked(bodyIds, currentInstanceIds, currentReferenceMeshIds, currentGroupIds, locked, current)));
   tool("plasticity_validate_bodies", "Run Plasticity's native B-Rep Check and report exact topology closure and solid printability for current revision-bound bodies.", z.object({ ids, revision }).strict(), async ({ ids: bodyIds, revision: current }) =>
     await session.get().validateBodies(bodyIds, current), true);
-  tool("plasticity_capabilities", "Page through native renderer bindings found in Plasticity 26.1.3. Defaults to 100 bindings per page; filter by case-insensitive substring with query. Returns total and matching counts plus nextOffset so large binding lists do not flood MCP context.", z.object({
+  tool("plasticity_capabilities", "Page through native renderer bindings found in the connected Plasticity build. Defaults to 100 bindings per page; filter by case-insensitive substring with query. Returns total and matching counts plus nextOffset so large binding lists do not flood MCP context.", z.object({
     query: z.string().trim().min(1).max(200).optional(),
     offset: z.number().int().nonnegative().default(0),
     limit: z.number().int().min(1).max(250).default(100),
