@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-25. The starting point is merged PR #12
-(`8648937d15620576e36eb6efa25694cd08c8015d`). Both application bundles are
+Date: 2026-10-25. The current continuation starts from merged PR #13
+(`0ce1ae4d2703fe1443e49586034262edce0a78d9`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,17 +29,48 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 62 | 70 |
+| Completed passing fixtures | 69 | 77 |
 | Failing or blocked fixtures | 4 | 4 |
-| Tools with success in an application-connected passing fixture | 161 | 204 |
+| Tools with success in an application-connected passing fixture | 168 | 211 |
 | Tools attempted only in unaccepted fixtures | 7 | 7 |
-| Tools without a recorded application-connected live call | 203 | 160 |
+| Tools without a recorded application-connected live call | 196 | 153 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
 fixture passed for three CSV/test-store tools. It uses synthetic tensile and
 fracture CSV files, verifies units, provenance and preview isolation, and never
 connects to Plasticity; its coverage is recorded separately in the matrix.
+
+## Core-operation continuation
+
+The identical seven-case suite passed **7/7 on each experimental copy**. No
+production adapter change was needed for these cases.
+
+`npm run accept:native-core-catalog -- --target ID --allow-disposable-mutations
+--case CASE --output NEW_DIRECTORY` selects one guarded scenario:
+
+| Case | Geometry assertions |
+| --- | --- |
+| `block-dimensions` | Resize a 10 mm cube to 20 × 15 × 12 mm; volume 3600 mm³ |
+| `radius-dimension` | Resize an R5, 10 mm cylinder to R3; volume 90π mm³ |
+| `offset-face` | Offset the top cube face by 2 mm; volume 1200 mm³ |
+| `extrude-face` | Preserve the original cube and create a separate 10 × 10 × 2 mm Solid; volumes 1000 and 200 mm³ |
+| `chamfer` | Chamfer one 10 mm edge by 2 mm; volume 980 mm³ |
+| `pipe` | Preserve a 20 mm straight Wire; create a solid sweep with exact R2 circular ends and 4 × 4 × 20 mm bounds |
+| `helix` | R5, two turns over 10 mm; native segment length √(400π² + 100) and 10 × 10 × 10 mm bounds |
+
+Each case checks one native history step, Undo, Redo with stable result IDs,
+and restoration of the empty snapshot. Solid outputs also require native
+validation. Analytic solid volumes use a 0.0001 mm³ tolerance; helix length and
+bounds use 0.001 mm. The native pipe has a B-Spline swept side, rather than an
+analytic Cylinder face. Its volume uses an explicit 0.01 mm³ tolerance against
+80π mm³, while exact end circles are checked separately. This does not accept
+hollow-pipe offset surfaces or establish analytic-cylinder equivalence.
+
+Initial authored checks incorrectly assumed that face extrusion and pipe
+creation replace their sources, used Solid edges to measure a Wire, and treated
+the native pipe sweep as an analytic cylinder. Those runs were not accepted;
+only corrected, completed passing fixtures contribute to the matrix.
 
 ## Compatibility fixes found by the audit
 
