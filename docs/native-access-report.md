@@ -1259,6 +1259,9 @@ file can leave geometry behind, and Undo can restore the previous scene. The
 visibility-after-load acceptance exercises replacement and restoration of its
 empty disposable document through this native path. It clears transient hover
 outlines before taking frames so Undo/Redo comparisons use the same visual state.
+Before each native open, the acceptance saves its disposable scene to a new
+checkpoint with the native save lifecycle, avoiding an unsaved-changes dialog
+while retaining the scene contents for inspection.
 The selection database exposes bodies, `InstanceEmpty` records, groups, faces,
 and edges as separate collections. The MCP maps those values to stable body,
 instance, group, and revision-bound topology IDs in both directions. An agent

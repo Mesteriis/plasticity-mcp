@@ -50,6 +50,7 @@ async function main(): Promise<void> {
     while (state.undoDepth > initial.undoDepth) state = await operations.undo(state.revision);
     requireEmpty(state);
 
+    state = await saveDisposableCheckpoint(operations, runtime, join(output, "empty-before-reopen.plasticity"));
     documentReplaced = true;
     state = await operations.openDocument(fixture, join(output, "before-reopen.plasticity"), state.revision);
     const hiddenBody = bodyNamed(state, "Hidden body fixture");
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
     state = await operations.undo(state.revision);
     assert.equal(bodyNamed(state, "Hidden body fixture").locked, false, "Lock Undo did not unlock the body");
 
+    state = await saveDisposableCheckpoint(operations, runtime, join(output, "fixture-before-restore.plasticity"));
     state = await operations.openDocument(emptyCopy, join(output, "before-restore.plasticity"), state.revision);
     requireEmpty(state);
     evidence.frames = { shown, undo, redo, hidden };
@@ -102,6 +104,7 @@ async function main(): Promise<void> {
       if (runtime && operations && initial && !runtime.isUncertain()) {
         let state = await operations.state();
         if (documentReplaced && emptyCopy) {
+          state = await saveDisposableCheckpoint(operations, runtime, join(output, "fixture-before-failure-restore.plasticity"));
           state = await operations.openDocument(emptyCopy, join(output, "failure-backup.plasticity"), state.revision);
         } else if (state.documentToken === initial.documentToken) {
           while (state.undoDepth > initial.undoDepth) state = await operations.undo(state.revision);
@@ -120,6 +123,18 @@ async function main(): Promise<void> {
     runtime?.close();
     await ownership.release();
   }
+}
+
+async function saveDisposableCheckpoint(operations: PlasticityOperations, runtime: PlasticityRuntime, path: string): Promise<RuntimeState> {
+  // saveCopy preserves the document's dirty flag. Save this disposable scene to
+  // its own new checkpoint before native open, which otherwise asks to discard it.
+  await operations.saveCopy(path);
+  await runtime.mutate(`async function (path) {
+    if (this.executor.isBusy) throw new Error('Plasticity is busy');
+    this.document.filename = path;
+    await this.save();
+  }`, [], [path]);
+  return await operations.state();
 }
 
 async function viewportFrame(operations: PlasticityOperations, runtime: PlasticityRuntime, path: string): Promise<Buffer> {
