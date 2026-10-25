@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 
 import { CdpClient } from "../cdp/client.ts";
 import { discoverPlasticityTargets, type PlasticityTarget } from "../cdp/discovery.ts";
+import { assertNodeInspectorEnabled } from "./electron-fuses.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -75,6 +76,7 @@ export async function ensurePlasticityCdp(options: {
   }
 
   const applicationPath = options.applicationPath ?? "/Applications/Plasticity.app";
+  await assertNodeInspectorEnabled(applicationPath);
   const launchArguments = [`--inspect-brk=127.0.0.1:${inspectorPort}`];
   if (options.userDataDirectory) launchArguments.push(`--user-data-dir=${options.userDataDirectory}`);
   await execFileAsync("open", ["-na", applicationPath, "--args", ...launchArguments]);

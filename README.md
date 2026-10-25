@@ -58,6 +58,17 @@ The default MCP catalog shows the core connect, inspection, change-tracking, and
 
 The launcher does not terminate an existing Plasticity process to add MCP access. If it reports that a restart is needed, save your documents, close Plasticity yourself, then rerun the command. CDP listens on loopback only.
 
+Before starting a new process, the launcher reads the Electron framework's fuse
+configuration. It requires `EnableNodeCliInspectArguments`; builds that disable
+or remove it fail immediately with a compatibility error instead of an inspector
+timeout. Plasticity 26.2.1 was [reported to disable this fuse](https://github.com/Mesteriis/plasticity-mcp/issues/10)
+and is not supported by this startup method. Plasticity 26.1.3 remains the
+live-tested version. An unreadable or unrecognized fuse configuration also stops
+the launch with a diagnostic. An existing loopback CDP session can still be used.
+The check only reads the framework; it does not patch the application or change
+its security settings. See [Electron's fuse documentation](https://www.electronjs.org/docs/latest/tutorial/fuses)
+for the inspector flag's behavior.
+
 ### Optional Workbench
 
 The Workbench is not required for chat-based use. Start it on the local machine with:
