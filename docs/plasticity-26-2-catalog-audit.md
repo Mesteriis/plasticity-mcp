@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-25. The current continuation starts from merged PR #17
-(`464b093ad4da534c746104c047b1adbf10a2ab0f`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-25. The current continuation starts from merged PR #18
+(`0292e51b76b0389535d2d9b7d4071a4abc01764f`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 109 | 117 |
-| Failing or blocked fixtures | 5 | 5 |
-| Tools with success in an application-connected passing fixture | 212 | 254 |
-| Tools attempted only in unaccepted fixtures | 8 | 8 |
-| Tools without a recorded application-connected live call | 151 | 109 |
+| Completed passing fixtures | 116 | 124 |
+| Failing or blocked fixtures | 6 | 6 |
+| Tools with success in an application-connected passing fixture | 222 | 264 |
+| Tools attempted only in unaccepted fixtures | 9 | 9 |
+| Tools without a recorded application-connected live call | 140 | 98 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -389,3 +389,65 @@ production build retains its advisory warning about chunks larger than 500 kB.
 Regression tests also cover the native factory adapters, directed vertex
 adjacency and save-before-open lifecycle. These gates are separate from live CAD
 acceptance and do not turn unobserved catalog entries into passes.
+
+## Measurements, datum refresh and file lifecycle
+
+Seven of eight executed scenarios passed on **each version**. The strict STEP
+scenario failed on both copies; `construction-plane` was not executed. No
+production adapter change was needed. All executed cases restored an empty,
+idle native document, including confirmed cleanup after the STEP gate failure.
+
+`npm run accept:native-measure-datum-files -- --target ID
+--allow-disposable-mutations --case CASE --output NEW_DIRECTORY` runs one
+explicitly guarded scenario through the production stdio server:
+
+| Case | Assertions |
+| --- | --- |
+| `bounds` | Exact native bounds and dimensions of a 10 × 20 × 30 mm Box |
+| `point-distance` | Opposite B-Rep vertices: distance √1400 mm and delta [10, 20, 30] mm |
+| `point-edge-interior` | Point-to-Line supporting and finite distances of 5 mm, no endpoint clamp |
+| `point-edge-clamped` | Supporting distance 5 mm, finite distance √50 mm, closest point at the endpoint |
+| `linear-edges` | Perpendicular skew edges: 90° and 30 mm; parallel edges: 0° and √1300 mm |
+| `datum-refresh` | Face-center point and edge axis, source Move, stale-reference handling, exact resolution after Undo |
+| `step-provenance` | STEP export/import, native geometry and mass, Undo/Redo, provenance and construction history across MCP restart |
+| `save-open` | Save-copy, overwrite rejection, changed-scene backup, saved-document and backup readback, empty baseline restoration |
+
+Measurement reads must preserve native revision and history. Geometry uses
+0.00001 mm coordinate/distance tolerance and 0.0001 mm³ volume tolerance.
+The source Box must retain six faces, twelve edges, volume 6000 mm³ and pass
+native validation. Measurement cases repeat after Redo with current topology
+references. A datum refresh never substitutes the nearest face when the
+original topology identity no longer exists; it must reject that reference.
+The original point and axis are re-resolved after Undo restores their topology.
+
+All acceptance stores are scoped to the new evidence directory, including
+reference provenance, downloaded artifacts, construction history and thread
+qualifications. The STEP fixture is designed to check its SHA-256, five confirmed geometry
+history events before restart, historical provenance after restart, live
+geometry after reconciliation, and cleanup through a fresh current revision.
+It has not passed that complete sequence: imported native bounds first failed
+the strict 0.00001 mm coordinate gate. On both versions the Box imported at minimum
+[0.99995, 1.99995, 2.99995] mm and maximum [11.00005, 22.00005, 33.00005] mm,
+an expansion of 0.00005 mm per side. This does not by itself prove a physical
+shape change or an adapter regression. The tolerance is retained, and provenance
+restart/history assertions beyond that gate remain unverified by this fixture.
+An initial authored assertion used `afterRevision` instead of the actual import
+response field `revision`; that failed run is excluded from accepted coverage.
+
+File open is a native document lifecycle operation that resets Undo/Redo.
+The save/open fixture verifies the original file remains unchanged and reads
+back the backup of the moved Box before restoring a saved empty document.
+It does not claim file open can be undone. Old MCP snapshot IDs are not reused
+after server restart, and file reopen is checked against explicit native
+geometry and the empty baseline rather than an obsolete document snapshot.
+
+The suite also exposes `construction-plane` for foreground-only saved-plane,
+workplane and plane-local profile checks. That case was **not run or accepted**
+in this continuation: UI automation could not acquire the experimental window.
+No focus guard was bypassed. Existing viewport/manual gaps and the strict
+circular-imprint failure remain outside accepted coverage.
+
+Integration validation for this continuation: `npm test` passed 1443 tests,
+`npm run typecheck` passed, Workbench passed 90 tests, its typecheck and production
+build. The build retains the advisory warning about chunks larger than 500 kB.
+These checks do not turn the failing or unexecuted live scenarios into passes.
