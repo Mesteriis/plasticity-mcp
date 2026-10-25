@@ -1,7 +1,7 @@
 # Plasticity 26.2.1 experimental adapter
 
 Validated on macOS Apple Silicon on 2026-10-25, alongside a separate copy of
-26.1.3. The installed application was not changed. This is adapter compatibility
+26.1.3, with recipe follow-ups on 2026-10-26. The installed application was not changed. This is adapter compatibility
 for a prepared experimental copy, not support for launching the unmodified
 26.2.1 distribution.
 
@@ -104,6 +104,16 @@ both versions, so that fixture remains unaccepted and does not establish restart
 provenance/history coverage. The new saved-plane/workplane case was not run
 because UI automation could not acquire the experimental window. See the
 [catalog audit](plasticity-26-2-catalog-audit.md) for completed per-version results.
+
+The joint/vent continuation adds guarded synthetic recipes for ventilation,
+heat-set pockets, locating pins, snap hooks, dovetails, enclosure lips/grooves
+and cable channels. The cable-channel case remains unaccepted on both versions:
+its native maximum Z is 10.112742414248142 mm against a nominal 10 mm bound;
+its strict bounds tolerance was retained. The suite checks native geometry and explicit multi-step history,
+retained profiles, cutter consumption, Undo/Redo and paired-body interference.
+The supplied clearances remain geometric test inputs, not qualified print fits,
+insert-retention ratings or snap-strength evidence. Per-version outcomes remain
+in the [catalog audit](plasticity-26-2-catalog-audit.md).
 
 ## Initial live coverage
 

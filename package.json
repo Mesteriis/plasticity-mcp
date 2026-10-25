@@ -61,6 +61,7 @@
     "accept:native-hiddenline-svg": "node scripts/verify-native-hiddenline-svg-live.ts",
     "accept:native-slot-profiles": "node scripts/verify-native-slot-profiles-live.ts",
     "accept:native-cone": "node scripts/verify-native-cone-live.ts",
+    "accept:native-joints-vents": "node scripts/verify-native-joints-vents-live.ts",
     "accept:native-measure-datum-files": "node scripts/verify-native-measure-datum-files-live.ts",
     "accept:native-align-project": "node scripts/verify-native-align-project-live.ts",
     "accept:native-profiles-lofts": "node scripts/verify-native-profiles-lofts-live.ts",
