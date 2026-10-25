@@ -13,3 +13,10 @@ test("topology-distance acceptance defaults to help and requires explicit live g
     help: false, target: "window-1", allowDisposableMutations: true, output: "/tmp/out",
   });
 });
+
+
+test("geometry-only acceptance is explicit and retains all mutation guards", () => {
+  assert.throws(() => parseNativeTopologyDistanceAcceptanceArgs(["--geometry-only"]), /--target/);
+  const options = parseNativeTopologyDistanceAcceptanceArgs(["--target", "window-1", "--allow-disposable-mutations", "--output", "/tmp/out", "--geometry-only"]);
+  assert.equal(options.geometryOnly, true);
+});

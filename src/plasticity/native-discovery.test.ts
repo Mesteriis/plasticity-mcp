@@ -45,9 +45,11 @@ test("binding selection uses the editor's real math types and canonical command 
   class DissolveEdgeFactory {}
   class DeleteRedundantTopologyCommand {}
   class CreateCommand {}
+  class ConvertCommand {}
+  class ConvertControlPointCommand {}
   class SolidBody {}
   class SheetBody {}
-  const editor = { commands: { CreateCommand, DeleteRedundantTopologyCommand }, viewports: [{ camera: { position: new Vector3(), quaternion: new Quaternion(), matrixWorld: new Matrix4() } }] };
+  const editor = { commands: { CreateCommand, DeleteRedundantTopologyCommand, ConvertCommand, ConvertControlPointCommand }, viewports: [{ camera: { position: new Vector3(), quaternion: new Quaternion(), matrixWorld: new Matrix4() } }] };
   const roots = { kernel: { SolidBody, SheetBody }, enums: { CurveType: { Polyline: 0 } } };
   const result = compile(SELECT_STORE_BINDINGS).call([ConstructionPlaneDatabase, Vector2, DuplicateFactory, duplicate, BoxFactory, SphereFactory, BridgeCurveFactory, DissolveEdgeFactory], editor, roots);
   assert.equal(result.Vector3, Vector3);
@@ -55,6 +57,7 @@ test("binding selection uses the editor's real math types and canonical command 
   assert.equal(result.Quaternion, Quaternion);
   assert.equal(result.BoxFactory, BoxFactory);
   assert.equal(result.CreateCommand, CreateCommand);
+  assert.equal(result.ConvertCommand, ConvertControlPointCommand, "geometry conversion must retain a native history command");
   assert.equal(result.PossiblyBooleanSphereFactory, SphereFactory);
   assert.equal(result.BridgeVertexFactory, BridgeCurveFactory);
   assert.equal(result.DeleteEdgeFactory, DissolveEdgeFactory);

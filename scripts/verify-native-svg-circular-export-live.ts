@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -71,8 +73,8 @@ async function main(): Promise<void> {
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     initial = await call(client, "plasticity_connect", { targetId: options.target });
-    const fixtureSolid = initial.bodies.find((body: any) => body.id === 2 && body.type === "Solid" && body.name === "SVG export probe");
-    const fixtureWire = initial.bodies.find((body: any) => body.id === 3 && body.type === "Wire" && body.name === "Rectangle.001");
+    const fixtureSolid = initial.bodies.find((body: any) => body.type === "Solid" && body.name === "SVG export probe");
+    const fixtureWire = initial.bodies.find((body: any) => body.type === "Wire" && body.name === "Rectangle.001");
     requireCondition(fixtureSolid && fixtureWire && initial.bodies.length === 2 && initial.regions.length === 1, "Refusing to mutate: target is not the dedicated two-body SVG probe document");
     evidence.initial = stateSummary(initial);
 
@@ -163,7 +165,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 function toolText(response: unknown): string {
   if (typeof response !== "object" || response === null || !("content" in response) || !Array.isArray(response.content)) throw new Error("MCP tool returned no content");

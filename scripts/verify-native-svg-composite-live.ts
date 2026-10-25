@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { sanitizeEvidence } from "./verify-section-strength-live.ts";
@@ -157,7 +159,7 @@ async function main(): Promise<void> {
     const nurbsCreated = await call(client, "plasticity_create_nurbs_curve", {
       pointsMm: [[0, 0, 0], [10, 12, 0], [20, -8, 0], [30, 0, 0]],
       closed: false,
-      intent: "Disposable NURBS side for a joined adaptive SVG profile",
+      intent: "Disposable NURBS side for a joined exact cubic SVG profile",
       revision: current.revision,
     });
     current = nurbsCreated;
@@ -168,7 +170,7 @@ async function main(): Promise<void> {
     current = await call(client, "plasticity_create_polyline", {
       pointsMm: [[30, 0, 0], [30, -10, 0], [0, -10, 0], [0, 0, 0]],
       closed: false,
-      intent: "Disposable three-Line side for the joined adaptive SVG profile",
+      intent: "Disposable three-Line side for the joined exact cubic SVG profile",
       revision: current.revision,
     });
     expectedRevision = current.revision;
@@ -196,25 +198,33 @@ async function main(): Promise<void> {
     const nurbsProfileExport = await call(client, "plasticity_export_svg", { ids: [joinedId], path: nurbsSvgPath, curveChordToleranceMm: 0.02, curveChordAngleDegrees: 5, revision: current.revision });
     const afterNurbsExport = await call(client, "plasticity_status", {});
     for (const field of ["targetId", "documentToken", "revision", "undoDepth", "redoDepth"] as const) requireCondition(current[field] === afterNurbsExport[field], `Mixed NURBS SVG export changed Plasticity ${field}`);
-    requireCondition(nurbsProfileExport.bodies === 1 && nurbsProfileExport.lineSegments === 3 && nurbsProfileExport.approximatedSegments === 1 && nurbsProfileExport.maxChordDeviationMm <= 0.02, "Mixed NURBS SVG export report does not preserve exact lines and the requested approximation tolerance");
+    requireCondition(nurbsProfileExport.bodies === 1 && nurbsProfileExport.lineSegments === 3 && nurbsProfileExport.cubicBezierSegments === 1 && nurbsProfileExport.approximatedSegments === 0 && nurbsProfileExport.maxChordDeviationMm === 0, "Mixed NURBS SVG export report does not preserve exact lines and the exact cubic");
     const nurbsSvg = await readFile(nurbsSvgPath, "utf8");
-    const adaptivePath = nurbsSvg.match(/<path d="([^"]+)" data-curve-type="(?:BCurve|NurbsCurve)" data-approximation="adaptive-chord"\/>/u)?.[1];
-    requireCondition(adaptivePath, "Joined NURBS SVG segment is not marked as an adaptive chord approximation");
-    const adaptivePoints = [...adaptivePath.matchAll(/[ML] ([^ ]+) ([^ ]+)/gu)].map((match) => [Number(match[1]), Number(match[2])]);
-    requireCondition(adaptivePoints.length >= 3 && adaptivePoints.flat().every(Number.isFinite), "Joined NURBS SVG polyline is too short or has invalid coordinates");
+    const cubicPath = nurbsSvg.match(/<path d="([^"]+)" data-curve-type="BCurve"\/>/u)?.[1];
+    const cubic = cubicPath?.match(/^M ([-+\d.eE]+) ([-+\d.eE]+) C ([-+\d.eE]+) ([-+\d.eE]+) ([-+\d.eE]+) ([-+\d.eE]+) ([-+\d.eE]+) ([-+\d.eE]+)$/u)?.slice(1).map(Number);
+    requireCondition(cubic?.length === 8 && cubic.every(Number.isFinite), "Joined NURBS SVG does not contain one finite exact cubic span");
+    const sampleParameters = [0.107, 0.283, 0.431, 0.569, 0.713, 0.893];
     const exactSamples = await call(client, "plasticity_evaluate_curve_segments", {
-      samples: [0.107, 0.283, 0.431, 0.569, 0.713, 0.893].map((normalizedParameter) => ({ bodyId: joinedId, segmentEntityId: nurbsSegment.entityId, normalizedParameter })),
+      samples: sampleParameters.map((normalizedParameter) => ({ bodyId: joinedId, segmentEntityId: nurbsSegment.entityId, normalizedParameter })),
       revision: current.revision,
     });
-    const deviations = exactSamples.samples.map((sample: { positionMm: number[] }) => pointPolylineDistanceMm(projectToSvg(sample.positionMm, joinedPlane), adaptivePoints));
+    const deviations = exactSamples.samples.map((sample: { positionMm: number[] }, index: number) => {
+      const point = projectToSvg(sample.positionMm, joinedPlane);
+      return Math.min(...[sampleParameters[index]!, 1 - sampleParameters[index]!].map(t => {
+        const u = 1 - t;
+        const x = u ** 3 * cubic![0]! + 3 * u ** 2 * t * cubic![2]! + 3 * u * t ** 2 * cubic![4]! + t ** 3 * cubic![6]!;
+        const y = u ** 3 * cubic![1]! + 3 * u ** 2 * t * cubic![3]! + 3 * u * t ** 2 * cubic![5]! + t ** 3 * cubic![7]!;
+        return Math.hypot(point[0]! - x, point[1]! - y);
+      }));
+    });
     const maxSampleDeviationMm = Math.max(...deviations);
-    requireCondition(maxSampleDeviationMm <= 0.02, `Joined NURBS SVG differs from exact B-Rep samples by ${maxSampleDeviationMm} mm`);
+    requireCondition(maxSampleDeviationMm <= 1e-7, `Joined NURBS SVG differs from exact B-Rep samples by ${maxSampleDeviationMm} mm`);
     evidence.joinedNurbsProfile = {
       sourceWireIds: [nurbsId, lineId], resultWireId: joinedId,
       nativeSegmentTypes: joinedSegments.map((segment: { curveType: string }) => segment.curveType),
       nativeClosed: joinedNative.closed,
       export: nurbsProfileExport,
-      adaptiveSvgPointCount: adaptivePoints.length,
+      exactSvgCubicSpanCount: 1,
       exactNativeSampleCount: deviations.length,
       maxExactSampleDeviationMm: maxSampleDeviationMm,
       svgSha256: createHash("sha256").update(nurbsSvg).digest("hex"),
@@ -266,7 +276,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 function toolText(response: unknown): string {
   if (typeof response !== "object" || response === null || !("content" in response) || !Array.isArray(response.content)) throw new Error("MCP tool returned no content");

@@ -4,6 +4,8 @@ import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -19,6 +21,7 @@ export interface NativeTopologyDistanceAcceptanceOptions {
   target?: string;
   allowDisposableMutations: boolean;
   output?: string;
+  geometryOnly?: boolean;
 }
 
 interface LiveMcp { client: Client; stderr: string[] }
@@ -28,7 +31,8 @@ export function parseNativeTopologyDistanceAcceptanceArgs(argv: string[]): Nativ
   const options: NativeTopologyDistanceAcceptanceOptions = { help: false, allowDisposableMutations: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--help") options.help = true;
+    if (argument === "--geometry-only") options.geometryOnly = true;
+    else if (argument === "--help") options.help = true;
     else if (argument === "--allow-disposable-mutations") options.allowDisposableMutations = true;
     else if (argument === "--target") {
       const value = argv[++index];
@@ -55,7 +59,9 @@ With no arguments or --help, this command performs no connection and no mutation
 Live mode refuses a nonempty Plasticity document, creates persistent native
 face-center and edge-midpoint distance measurements, verifies topology targets,
 exact values, their rendered viewport annotation, Undo/Redo, and cleanup, then
-writes bounded evidence.`;
+writes bounded evidence.
+--geometry-only checks persistent native values, topology, Undo/Redo and cleanup;
+it explicitly leaves viewport rendering unverified.`;
 
 async function main(): Promise<void> {
   const options = parseNativeTopologyDistanceAcceptanceArgs(process.argv.slice(2));
@@ -86,7 +92,7 @@ async function main(): Promise<void> {
     await call(live.client, "plasticity_select_bodies", { ids: [box.id], revision: state.revision });
     await clearSelection(options.target!);
     await delay(250);
-    const geometryScreenshot = await captureScreenshot(live.client, options.target!, join(output, "geometry-before-measurements.png"));
+    const geometryScreenshot = options.geometryOnly ? undefined : await captureScreenshot(live.client, options.target!, join(output, "geometry-before-measurements.png"));
     const bottom = onlyFaceAtZ(box, 0, "bottom");
     const top = onlyFaceAtZ(box, 5, "top");
     const topFrontEdge = onlyEdgeAt(box, [10, 0, 5]);
@@ -123,38 +129,41 @@ async function main(): Promise<void> {
     verifyDistance(onlyMeasurement(listed, "Thickness 5"), ["face", "face"], [bottom.id, top.id], 5, "Listed thickness measurement");
     verifyDistance(onlyMeasurement(listed, "Face to edge"), ["face", "edge"], [bottom.id, topFrontEdge.id], Math.sqrt(50), "Listed mixed measurement");
     verifyDistance(onlyMeasurement(listed, "Width 20"), ["vertex", "vertex"], [frontBottomLeft.id, frontBottomRight.id], 20, "Listed vertex width measurement");
-    await call(live.client, "plasticity_select_bodies", { ids: [box.id], revision: state.revision });
-    await clearSelection(options.target!);
-    await delay(250);
-    const overlay = await readMeasurementOverlay(options.target!);
-    const visibleLabels = overlay.labels;
-    for (const expected of ["5.00 mm", "7.07 mm", "20.00 mm"]) {
-      requireCondition(visibleLabels.some((label) => label.text === expected && label.visible && label.insideViewport),
-        `Expected a visible in-viewport native measurement label: ${expected}`);
+    evidence.measurements = { values: listed.measurements, viewportValidation: "not-run" };
+    if (!options.geometryOnly) {
+      await call(live.client, "plasticity_select_bodies", { ids: [box.id], revision: state.revision });
+      await clearSelection(options.target!);
+      await delay(250);
+      const overlay = await readMeasurementOverlay(options.target!);
+      const visibleLabels = overlay.labels;
+      for (const expected of ["5.00 mm", "7.07 mm", "20.00 mm"]) {
+        requireCondition(visibleLabels.some((label) => label.text === expected && label.visible && label.insideViewport),
+          `Expected a visible in-viewport native measurement label: ${expected}`);
+      }
+      requireCondition(overlay.segments.length >= 3 && overlay.segments.every((segment) =>
+        segment.lengthMm > 0 && segment.colorHex === "b7f397" && !segment.depthTest && segment.linewidth === 2),
+        "Expected nonzero native dimension/extension segments for the rendered measurements");
+      let annotatedScreenshot: Awaited<ReturnType<typeof captureScreenshot>> | undefined;
+      let annotationDifference: ReturnType<typeof comparePngPixels> | undefined;
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await delay(100);
+        annotatedScreenshot = await captureScreenshot(live.client, options.target!, join(output, `geometry-with-measurements-${attempt + 1}.png`));
+        annotationDifference = comparePngPixels(geometryScreenshot!.png, annotatedScreenshot.png);
+        if (annotationDifference.changedPixelCount > 200) break;
+      }
+      evidence.measurements = {
+        values: listed.measurements,
+        visibleLabels,
+        visibleSegments: overlay.segments,
+        renderedViewport: {
+          before: geometryScreenshot!.summary,
+          after: annotatedScreenshot!.summary,
+          pixelDifference: annotationDifference,
+        },
+      };
+      requireCondition(annotationDifference?.changedPixelCount !== undefined && annotationDifference.changedPixelCount > 200,
+        `Native measurements did not visibly change the viewport (changed ${annotationDifference?.changedPixelRatio ?? 0})`);
     }
-    requireCondition(overlay.segments.length >= 3 && overlay.segments.every((segment) =>
-      segment.lengthMm > 0 && segment.colorHex === "b7f397" && !segment.depthTest && segment.linewidth === 2),
-      "Expected nonzero native dimension/extension segments for the rendered measurements");
-    let annotatedScreenshot: Awaited<ReturnType<typeof captureScreenshot>> | undefined;
-    let annotationDifference: ReturnType<typeof comparePngPixels> | undefined;
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      await delay(100);
-      annotatedScreenshot = await captureScreenshot(live.client, options.target!, join(output, `geometry-with-measurements-${attempt + 1}.png`));
-      annotationDifference = comparePngPixels(geometryScreenshot.png, annotatedScreenshot.png);
-      if (annotationDifference.changedPixelCount > 200) break;
-    }
-    evidence.measurements = {
-      values: listed.measurements,
-      visibleLabels,
-      visibleSegments: overlay.segments,
-      renderedViewport: {
-        before: geometryScreenshot.summary,
-        after: annotatedScreenshot!.summary,
-        pixelDifference: annotationDifference,
-      },
-    };
-    requireCondition(annotationDifference?.changedPixelCount !== undefined && annotationDifference.changedPixelCount > 200,
-      `Native measurements did not visibly change the viewport (changed ${annotationDifference?.changedPixelRatio ?? 0})`);
 
     state = await call(live.client, "plasticity_undo", { intent: "Verify topology-distance Undo", revision: state.revision });
     requireCondition((state.measurements ?? []).length === 2
@@ -198,7 +207,7 @@ function verifyDistance(measurement: any, types: [string, string], refs: [string
 }
 function requireEmpty(state: any, label: string): void { requireCondition(state.bodies.length === 0 && state.regions.length === 0 && (state.instances ?? []).length === 0, `${label} is not empty`); requireCondition((state.groups ?? []).filter((group: { id: number }) => group.id !== 0).length === 0, `${label} contains non-root groups`); }
 async function startMcp(storeRoot: string): Promise<LiveMcp> { const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" }, stderr: "pipe" }); const stderr: string[] = []; transport.stderr?.on("data", (chunk) => { stderr.push(String(chunk).slice(-4096)); while (stderr.join("").length > 16384) stderr.shift(); }); const client = new Client({ name: "plasticity-native-topology-distance-live", version: "1.0.0" }); await client.connect(transport); return { client, stderr }; }
-async function call(client: Client, name: string, args: Record<string, unknown>): Promise<any> { const response = await client.callTool({ name, arguments: args }); const text = toolText(response); if ("isError" in response && response.isError) throw new Error(text); return JSON.parse(text); }
+async function call(client: Client, name: string, args: Record<string, unknown>): Promise<any> { const response = await client.callTool({ name, arguments: args }); const text = toolText(response); if ("isError" in response && response.isError) throw new Error(text); return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision })); }
 function toolText(response: unknown): string { if (typeof response !== "object" || response === null || !("content" in response) || !Array.isArray(response.content)) throw new Error("MCP tool returned no content"); const item = response.content.find((entry): entry is { type: "text"; text: string } => typeof entry === "object" && entry !== null && "type" in entry && entry.type === "text" && "text" in entry && typeof entry.text === "string"); if (!item) throw new Error("MCP tool returned no text content"); return item.text; }
 async function recover(client: Client, initial: any): Promise<Record<string, unknown>> { for (let count = 0; count < 24; count += 1) { const status = await call(client, "plasticity_status", {}); if (status.documentToken !== initial.documentToken) return { restoredEmptyDocument: false, reason: "document-changed" }; if (status.undoDepth <= initial.undoDepth) return { restoredEmptyDocument: status.bodies.length === 0 && status.regions.length === 0 && (status.measurements ?? []).length === 0 }; await call(client, "plasticity_undo", { intent: "Recover disposable native topology-distance acceptance", revision: status.revision }); } return { restoredEmptyDocument: false, reason: "undo-limit" }; }
 function stateSummary(state: any): Record<string, any> { return { documentToken: state.documentToken, revision: state.revision, undoDepth: state.undoDepth, redoDepth: state.redoDepth, bodyCount: state.bodies.length, regionCount: state.regions.length, measurementCount: (state.measurements ?? []).length }; }

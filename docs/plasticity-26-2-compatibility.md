@@ -56,7 +56,16 @@ on both success and rejection. Remote debugging remains bound to loopback.
 - Control-point ID zero is accepted by MCP, as returned by 26.2.1. Negative,
   duplicate, unknown and stale references remain rejected.
 
-## Live coverage
+## Catalog audit follow-up
+
+The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every
+registered tool with independent per-version evidence and explicit gaps. It
+adds deformation, refinement, reference meshes, interference, dimensions,
+sections, fastener workflows and SVG checks. The follow-up fixes hollow-shell unjoin and shell-vertex offset, and resolves the
+26.1 native-open confirmation timeout. The final six-scenario regression passed
+on both versions; the audit does not claim acceptance of all 371 tools.
+
+## Initial live coverage
 
 The same checkout and production adapter were used against both disposable
 application copies. Every listed final run passed; fixtures were undone or the
@@ -95,9 +104,9 @@ fetch revision-matched `plasticity_body_info` when mutation results contain
 compact summaries. The helper leaves validation/measurement responses intact
 and rejects document, revision or body-ID mismatches.
 
-## Automated checks
+## Initial automated checks (PR #12)
 
-On this change, `npm test` passed 1390 tests, and `npm run typecheck` passed.
+On PR #12, `npm test` passed 1390 tests, and `npm run typecheck` passed.
 Workbench passed 90 tests, its typecheck, and its production build. The build
 retains its advisory warning about chunks larger than 500 kB. These checks do
 not run Plasticity or replace the live evidence above.

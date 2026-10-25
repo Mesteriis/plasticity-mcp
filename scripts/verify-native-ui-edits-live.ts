@@ -4,6 +4,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -48,6 +50,7 @@ native bounds, Undo/Redo and recovery to the original empty document.`;
 async function main(): Promise<void> {
   const options = parseNativeUiEditArgs(process.argv.slice(2));
   if (options.help) { console.log(HELP); return; }
+  if (!process.stdin.isTTY) throw new Error("Direct UI-edit acceptance requires an interactive terminal; unattended runs must skip this manual scenario");
   const output = resolve(options.output!);
   await mkdir(output, { mode: 0o700 });
   const evidence: Record<string, unknown> = {
@@ -169,7 +172,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const text = content.find((item: unknown): item is { type: "text"; text: string } =>
     typeof item === "object" && item !== null && "type" in item && item.type === "text" && "text" in item && typeof item.text === "string")?.text;
   if (!text || response.isError) throw new Error(text ?? `MCP tool ${name} returned no text`);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 async function recover(client: Client, initial: any): Promise<Record<string, unknown>> {
   for (let count = 0; count < 24; count += 1) {

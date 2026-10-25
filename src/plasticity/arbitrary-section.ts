@@ -152,6 +152,7 @@ async function collectNativeArbitrarySection(
       geo: { value: temporary },
       db: { value: temporaryDatabase },
     });
+    if (this.db.editor === this) Object.defineProperty(temporaryDatabase, 'editor', { value: temporaryEditor });
     let targetCopy;
     let sheetBody;
     let factory;
@@ -161,7 +162,7 @@ async function collectNativeArbitrarySection(
     try {
       targetCopy = model.Clone();
       sheetBody = kernel_Sheet.CreateRectangle(args.sheet.extentM, args.sheet.extentM, basis);
-      const usedVersions = new Set(temporary.geometryModel.keys());
+      const usedVersions = new Set((temporary.read?.geometryModel ?? temporary.geometryModel).keys());
       let targetVersionId = args.temporaryIds.targetVersionId;
       let targetStableId = args.temporaryIds.targetStableId;
       let sheetVersionId = args.temporaryIds.sheetVersionId;
@@ -173,21 +174,17 @@ async function collectNativeArbitrarySection(
         sheetVersionId -= 4;
         sheetStableId -= 4;
       }
-      const targetCvs = targetCopy.GetCVs();
-      const sheetCvs = sheetBody.GetCVs();
-      const views = await this.views.build([
-        { model: targetCopy, cvs: targetCvs, versionId: targetVersionId, stableId: targetStableId },
-        { model: sheetBody, cvs: sheetCvs, versionId: sheetVersionId, stableId: sheetStableId },
-      ], 'real');
+      const targetJob = nativeApi.temporaryModelData(targetCopy, targetVersionId, targetStableId);
+      const sheetJob = nativeApi.temporaryModelData(sheetBody, sheetVersionId, sheetStableId);
+      const views = await this.views.build([targetJob, sheetJob], 'real');
       targetView = views[0];
       sheetView = views[1];
-      await temporary.addItem(targetCopy, targetCvs, targetView, targetStableId, 'user');
-      await temporary.addItem(sheetBody, sheetCvs, sheetView, sheetStableId, 'user');
+      await nativeApi.addTemporaryItem(temporary, targetJob, targetView);
+      await nativeApi.addTemporaryItem(temporary, sheetJob, sheetView);
       const cutterFace = sheetView?.high?.faces?.get(0);
       if (!cutterFace) throw new Error('Temporary Sheet face was not built');
       factory = new CutFactory(temporaryEditor);
-      factory.target = targetView;
-      factory.face = cutterFace;
+      nativeApi.configureSectionCut(factory, targetView, cutterFace);
       const calculated = await factory.calculate(factory.partition);
       const results = Array.isArray(calculated) ? calculated : [calculated].filter(Boolean);
       const positiveFaces = [];

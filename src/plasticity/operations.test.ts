@@ -28,6 +28,10 @@ test("document opening backs up first and uses the native scene/history replacem
   let state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "fixture", revision: "r1", dbVersion: 1, undoDepth: 5, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
   const editor = {
     executor: { isBusy: false }, document: { filename: "fixture.plasticity" },
+    async save() {
+      events.push("save-backup");
+      assert.equal(this.document.filename, await realpath(backup));
+    },
     async open(path: string) {
       events.push("open");
       assert.deepEqual(await readFile(backup), header);
@@ -47,7 +51,7 @@ test("document opening backs up first and uses the native scene/history replacem
   operations.saveCopy = async (path: string) => { events.push("backup"); await writeFile(path, header); return { path, bytes: header.length }; };
   try {
     const opened = await operations.openDocument(input, backup, "r1");
-    assert.deepEqual(events, ["backup", "open"]);
+    assert.deepEqual(events, ["backup", "save-backup", "open"]);
     assert.equal(opened.documentToken, "empty");
     assert.equal(opened.undoDepth, 0);
     assert.equal(opened.bodies.length, 0);
@@ -80,6 +84,28 @@ test("document opening never invokes native open when validation or backup fails
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("document opening never overwrites the old file and stops if native backup saving fails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-open-save-"));
+  const input = join(root, "input.plasticity"), backup = join(root, "backup.plasticity"), original = join(root, "original.plasticity");
+  const header = Buffer.alloc(24); header.write("plasticity");
+  await writeFile(input, header);
+  await writeFile(original, "original document must not be overwritten");
+  let opens = 0;
+  const editor = { executor: { isBusy: false }, document: { filename: original }, async save() { assert.equal(this.document.filename, await realpath(backup)); throw new Error("native backup save failed"); }, async open() { opens += 1; } };
+  const runtime = {
+    async getState() { return { revision: "r1", construction: emptyConstruction, bodies: [], regions: [] }; },
+    async mutate(source: string, _bindings: string[], values: unknown[]) { return await Function(`return (${source})`)().apply(editor, values); },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  operations.saveCopy = async path => { await writeFile(path, header); return { path, bytes: 24 }; };
+  try {
+    await assert.rejects(operations.openDocument(input, backup, "r1"), /native backup save failed/);
+    assert.equal(opens, 0);
+    assert.equal(editor.document.filename, await realpath(backup));
+    assert.equal(await readFile(original, "utf8"), "original document must not be overwritten");
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("screenshot refuses a stale renderer surface while Plasticity is hidden", async () => {
@@ -2217,11 +2243,11 @@ test("inserts exact native split vertices along incident shell edges", async () 
 
   await operations.offsetVertices(references, 5, state.revision);
 
-  assert.deepEqual(call?.bindings, ["OffsetVertexFactory", "OffsetVertexCommand"]);
+  assert.deepEqual(call?.bindings, ["OffsetVertexFactory", "OffsetVertexCommand", "pk_default"]);
   assert.deepEqual(call?.values, [{ vertices: references, distance: 0.005 }]);
   assert.match(call?.source ?? "", /Snaps_ShellVertexSnap/);
-  assert.match(call?.source ?? "", /factory\.vertices = selectedSnaps\.map\(snap => snap\.model\)/);
-  assert.match(call?.source ?? "", /factory\._vertices\.views = selectedSnaps\.map/);
+  assert.match(call?.source ?? "", /nativeApi\.configureOffsetVertices\(factory, selectedSnaps, pk_default\.a\)/);
+  assert.match(call?.source ?? "", /factory\._vertices\.views = snaps\.map/);
   assert.match(call?.source ?? "", /parentItem: snap\.item/);
   assert.match(call?.source ?? "", /new Command\(editor\)/);
 });
@@ -3990,8 +4016,8 @@ test("splits one nonperiodic native Wire segment at a normalized parameter", asy
   assert.deepEqual(call?.values, [{ reference: { bodyId: 7, segmentEntityId: 99 }, normalizedParameter: 0.5 }]);
   assert.match(call?.source ?? "", /edge\.IsPeriodic\(\)/);
   assert.match(call?.source ?? "", /factory\._segment\.model = new Proxy/);
-  assert.match(call?.source ?? "", /target\.SplitAt\(args\.normalizedParameter\)/);
-  assert.doesNotMatch(call?.source ?? "", /Denormalize/);
+  assert.match(call?.source ?? "", /nativeApi\.configureCurveSplit\(factory, segment, args\.normalizedParameter\)/);
+  assert.doesNotMatch((call?.source ?? "").slice((call?.source ?? "").lastIndexOf("return (async function")), /Denormalize/);
 });
 
 test("rejects invalid native curve segment splits before mutation", async () => {
@@ -5491,10 +5517,10 @@ test("unjoins complete native Solid and Sheet shells into independent faces", as
 
   await operations.unjoinShells([7, 8], state.revision);
 
-  assert.deepEqual(call?.bindings, ["UnjoinShellsFactory"]);
+  assert.deepEqual(call?.bindings, ["UnjoinShellsFactory", "CreateSheetFromFacesFactory"]);
   assert.deepEqual(call?.values, [{ ids: [7, 8] }]);
   assert.match(call?.source ?? "", /UnjoinShellsCommand/);
-  assert.match(call?.source ?? "", /factory\.shells = args\.ids\.map\(find\)/);
+  assert.match(call?.source ?? "", /nativeApi\.createUnjoinFactory\(Factory, SheetFactory, args\.ids\.map\(find\)\)/);
 });
 
 test("rejects stale, duplicate, missing, and Wire shell-unjoin inputs before mutation", async () => {

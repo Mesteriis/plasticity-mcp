@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -197,7 +199,7 @@ async function startMcp(storeRoot: string): Promise<LiveMcp> {
 async function call(client: Client, name: string, args: Record<string, unknown>): Promise<any> {
   const response = await client.callTool({ name, arguments: args });
   if (response.isError) throw new Error(toolText(response));
-  return JSON.parse(toolText(response));
+  return await hydrateNativeState(JSON.parse(toolText(response)), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 async function callError(client: Client, name: string, args: Record<string, unknown>): Promise<string> {
   const response = await client.callTool({ name, arguments: args });

@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { sanitizeEvidence } from "./verify-section-strength-live.ts";
@@ -226,7 +228,7 @@ async function call<T>(client: Client, name: string, args: Record<string, unknow
   const content = (response as { content?: Array<{ type: string; text?: string }> }).content ?? [];
   const text = content.find((item) => item.type === "text")?.text;
   if (response.isError || !text) throw new Error(text ?? `MCP tool ${name} returned no text`);
-  return JSON.parse(text) as T;
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision })) as T;
 }
 function requireEmpty(state: any): void {
   requireCondition(state.bodies.length === 0 && state.regions.length === 0,

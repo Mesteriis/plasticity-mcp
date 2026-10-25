@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -95,6 +97,7 @@ async function main(): Promise<void> {
     const afterCheck = await call(live.client, "plasticity_status", {});
     requireCondition(report.source === "native-brep-temporary-intersection", "Interference source is not exact native B-Rep");
     requirePersistentStateEqual(beforeCheck, afterCheck);
+    evidence.nativeInterference = report;
     const overlap = report.pairs[0];
     requireCondition(overlap?.status === "interfere", "Overlapping boxes were not classified as interference");
     requireCondition(overlap.intersectionBodies?.length === 1, "Overlap did not yield exactly one intersection Solid");
@@ -159,7 +162,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 function toolText(response: unknown): string {

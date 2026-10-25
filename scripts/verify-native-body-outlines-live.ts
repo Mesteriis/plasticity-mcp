@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -239,7 +241,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const item = (response.content as Array<{ type: string; text?: string }>).find((entry) => entry.type === "text" && typeof entry.text === "string");
   if (!item?.text) throw new Error("MCP tool returned no text content");
   if (response.isError) throw new Error(item.text);
-  return JSON.parse(item.text);
+  return await hydrateNativeState(JSON.parse(item.text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 async function recover(client: Client, initial: any, initialActivePlaneId: string | null): Promise<Record<string, unknown>> {

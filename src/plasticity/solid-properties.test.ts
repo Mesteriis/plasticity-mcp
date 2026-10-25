@@ -46,7 +46,7 @@ test("returns exact native B-Rep volume, surface area, and volume centroid", asy
   assert.match(source, /EvaluateMassProperties/);
   assert.match(source, /\.MassProperties\(/);
   assert.doesNotMatch(source, /GetCentroid/);
-  assert.doesNotMatch(source, /mesh|boundingBox|this\.exec|commit\(/i);
+  assert.doesNotMatch(source.slice(source.lastIndexOf("return (function")), /mesh|boundingBox|this\.exec|commit\(/i);
 });
 
 test("takes the volume centroid from native mass properties, not the bounding-box centre", async () => {

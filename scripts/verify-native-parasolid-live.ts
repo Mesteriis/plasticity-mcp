@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -103,7 +105,9 @@ async function main(): Promise<void> {
     state = await call(live.client, "plasticity_undo", { intent: "Remove disposable Parasolid source before round-trip import", revision: state.revision });
     requireEmptyDisposableScene(state);
 
-    state = await call(live.client, "plasticity_import_parasolid", { path: textPath, intent: "Round-trip Parasolid text acceptance", revision: state.revision });
+    const importedTextReport = await call(live.client, "plasticity_import_parasolid", { path: textPath, intent: "Round-trip Parasolid text acceptance", revision: state.revision });
+    state = await call(live.client, "plasticity_status", {});
+    requireCondition(state.revision === importedTextReport.revision && state.documentToken === importedTextReport.documentToken, "Document changed after text import");
     const importedText = onlySolid(state, "text import");
     verifyImportedBox(importedText, "text import");
     const textValidation = await validateSolid(live.client, state, importedText.id, "text import");
@@ -119,7 +123,9 @@ async function main(): Promise<void> {
     state = await call(live.client, "plasticity_undo", { intent: "Clean up Parasolid text import", revision: state.revision });
     requireEmptyDisposableScene(state);
 
-    state = await call(live.client, "plasticity_import_parasolid", { path: binaryPath, intent: "Round-trip Parasolid binary acceptance", revision: state.revision });
+    const importedBinaryReport = await call(live.client, "plasticity_import_parasolid", { path: binaryPath, intent: "Round-trip Parasolid binary acceptance", revision: state.revision });
+    state = await call(live.client, "plasticity_status", {});
+    requireCondition(state.revision === importedBinaryReport.revision && state.documentToken === importedBinaryReport.documentToken, "Document changed after binary import");
     const importedBinary = onlySolid(state, "binary import");
     verifyImportedBox(importedBinary, "binary import");
     const binaryValidation = await validateSolid(live.client, state, importedBinary.id, "binary import");
@@ -166,7 +172,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 function toolText(response: unknown): string {
