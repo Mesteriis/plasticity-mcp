@@ -1257,7 +1257,8 @@ backup saved before opening and a check of the resulting filename. Committing
 `OpenFileFactory` directly skips scene/history lifecycle work: opening an empty
 file can leave geometry behind, and Undo can restore the previous scene. The
 visibility-after-load acceptance exercises replacement and restoration of its
-empty disposable document through this native path.
+empty disposable document through this native path. It clears transient hover
+outlines before taking frames so Undo/Redo comparisons use the same visual state.
 The selection database exposes bodies, `InstanceEmpty` records, groups, faces,
 and edges as separate collections. The MCP maps those values to stable body,
 instance, group, and revision-bound topology IDs in both directions. An agent
