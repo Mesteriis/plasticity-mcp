@@ -6721,6 +6721,8 @@ export class PlasticityOperations {
       const found = new Set(regions.map(region => String(region.versionId)));
       const missing = args.regionIds.filter(id => !found.has(id));
       if (missing.length > 0) throw new Error('Stale or unknown regions: ' + missing.join(', '));
+      // Clear inside the command so a selected profile cannot start a follow-up move.
+      editor.selection.selected.removeAll();
       factory.regions = regions;
       ${commandEnd}
     }`, ["PatchRegionFactory"], [{ regionIds: uniqueIds }]);

@@ -171,6 +171,24 @@ test("rejects stale, duplicate, unknown, and non-shell face references before na
   }
 });
 
+test("accepts a periodic cylindrical face whose two native loops are both inner", async () => {
+  const reference = { bodyId: 7, faceId: "17f1" };
+  const state = runtimeState();
+  const runtime = {
+    async getState() { return state; },
+    async readNative() {
+      return [native(reference, 17, 101, 18 * Math.PI / 1_000_000, 6 * Math.PI / 1000, [0.01, 0.01, 0.009], {
+        surfaceType: "Cylinder", planar: false, loopCount: 2, innerLoopCount: 2,
+      })];
+    },
+  } as unknown as PlasticityRuntime;
+  const measured = await measureFaceProperties(runtime, [reference], "r1", "session-1");
+  assert.equal(measured.faces[0]!.loopCount, 2);
+  assert.equal(measured.faces[0]!.innerLoopCount, 2);
+  assert.ok(Math.abs(measured.faces[0]!.areaMm2 - 18 * Math.PI) < 1e-10);
+  assert.ok(Math.abs(measured.faces[0]!.boundaryLengthMm - 6 * Math.PI) < 1e-10);
+});
+
 test("rejects invalid native face properties", async () => {
   const reference = { bodyId: 7, faceId: "17f1" };
   const invalid: NativeFaceProperties[] = [
@@ -178,6 +196,9 @@ test("rejects invalid native face properties", async () => {
     native(reference, 17, 101, 2e-4, 0, [0.01, 0.005, 0]),
     native(reference, 17, 101, 2e-4, 0.06, [Number.NaN, 0.005, 0]),
     native(reference, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0], { loopCount: 0 }),
+    native(reference, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0], { loopCount: 2, innerLoopCount: 2 }),
+    native(reference, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0], { planar: false, loopCount: 2, innerLoopCount: 3 }),
+    native(reference, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0], { planar: false, loopCount: 2, innerLoopCount: -1 }),
     native(reference, 17, 101, 2e-4, 0.06, [0.01, 0.005, 0], { nativeCheckCodes: [17] }),
   ];
   for (const result of invalid) {

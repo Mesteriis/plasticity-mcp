@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-25. The current continuation starts from merged PR #14
-(`0905f46eeb08bbb372728d51d6ad91ebcf39f6af`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-25. The current continuation starts from merged PR #15
+(`5cd8ccfb063687cd15475c886e434d970f3ea4b1`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 81 | 89 |
+| Completed passing fixtures | 90 | 98 |
 | Failing or blocked fixtures | 4 | 4 |
-| Tools with success in an application-connected passing fixture | 178 | 221 |
+| Tools with success in an application-connected passing fixture | 188 | 231 |
 | Tools attempted only in unaccepted fixtures | 7 | 7 |
-| Tools without a recorded application-connected live call | 186 | 143 |
+| Tools without a recorded application-connected live call | 176 | 133 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -123,6 +123,71 @@ Unit regressions execute the generated native function, verify distance/flags,
 copy versus deletion, stale/duplicate-source rejection and that failed or
 missing reflected results never start source deletion. Earlier failed mirror and authored rectangle-axis
 checks are superseded only by passing runs of the same case in the matrix.
+
+## Sheets, blends and attached features
+
+All nine scenarios passed on each experimental copy, including the selected
+profile patch and complete cylindrical bore measurements after the fixes.
+
+`npm run accept:native-sheets-features -- --target ID --allow-disposable-mutations
+--case CASE --output NEW_DIRECTORY` selects nine guarded scenarios:
+
+| Case | Independent geometry assertions |
+| --- | --- |
+| `patch-region` | Selected R5 circular Wire and Region produce one planar Sheet; area 25π mm², boundary length 10π mm, exact disk bounds and retained Wire |
+| `thicken-sheet` | R5 disk thickens 2 mm along its native front normal; volume 50π mm³ and exact directional bounds, retained Wire |
+| `reverse-sheet` | Same disk area, boundary and bounds; native face normal is the negative of the source normal |
+| `revolve-profile` | Rectangle at radii 2–5 mm, height 10 mm, revolves 360°; volume 210π mm³, exact bounds and retained profile |
+| `remove-fillets` | Four R2 vertical blends on a 20 × 20 × 10 mm block are removed; original volume 4000 mm³ and 6-face/12-edge block topology |
+| `refillet-faces` | Four recognized R2 blends become R3; volume 3640 + 90π mm³ and unchanged block bounds |
+| `screw-boss` | Ø8 boss, height 8 mm, on a 20 × 20 × 4 mm plate; blind Ø3 pilot, depth 6 mm; volume 1600 + 114.5π mm³, pilot floor Z=6 mm and bore area 18π mm² |
+| `rib` | Right-triangular 10 × 10 mm profile, thickness 2 mm, embedded 1 mm into a 20 × 20 × 2 mm plate; union volume 881 mm³, exact bounds and retained editable profile |
+| `hinge-barrel` | R4 barrel, R1 bore, length 10 mm, axis at X=3 mm, joined to a wall ending at X=0; volume 4000 + 150π − 10[16 acos(3/4) − 3√7] mm³ and complete bore area 20π mm² |
+
+The barrel overlaps only the outer circular cap of the support wall; the pin
+bore remains clear. The rib volume subtracts the 19 mm³ overlap with its plate.
+Screw-boss and barrel recipes require four confirmed native history steps;
+rib requires three; the remaining operations require one. Every case checks
+native validation, Undo to the source snapshot, Redo with stable result IDs,
+geometry again after Redo, and cleanup to the initial empty snapshot. Source
+Solid volumes are also checked after Undo. Volume/area tolerances are
+0.0001 mm³/mm²; linear coordinates and radii use 0.00001 mm, and normal components use
+0.00001.
+
+### Patch after curve selection
+
+The first selected-curve patch timed out after committing its Sheet. Read-only
+reconciliation found the expected Wire and planar disk, two history steps and
+an awaiting native `MoveItemCommand`. The owned fixture was checkpointed, that
+interactive command was cancelled, and its two confirmed changes were undone.
+No uncertain mutation was repeated or counted as accepted.
+
+`patch_regions` now clears selection inside the owned patch command before
+committing its explicit Regions, preventing the automatic interactive move.
+The acceptance deliberately selects the source Wire, verifies the current
+selection and unchanged scene revision, then patches it. Unit regressions
+execute the generated native function and require selection clearing inside
+the command before commit, input rejection before selection changes, and
+native error propagation.
+
+### Periodic face-loop validation
+
+The screw-boss and hinge checks initially rejected valid cylindrical bore
+measurements. Direct native reads on both versions reported `loopCount=2`,
+`innerLoopCount=2`, positive exact areas/boundary lengths, and no face Check
+codes. The same native classification occurred on the boss's outer cylinder.
+A periodic curved carrier need not have the outer-loop classification required
+for a bounded planar face.
+
+Face-property validation now permits equal total/inner counts for nonplanar
+faces. Planar faces still require an outer loop; negative, fractional,
+out-of-range and zero total counts remain rejected. Identity, finite mass
+properties, native Check codes and persistent-state checks are unchanged. The
+returned counts remain native values, and the result limitation explains that
+inner-loop count on a periodic carrier is not a planar hole count. Unit coverage
+checks the valid cylinder and preserves rejection of planar equality and
+impossible curved-face counts. This change does not accept zero-boundary closed
+faces or claim support for every periodic/degenerate configuration.
 
 ## Compatibility fixes found by the audit
 

@@ -72,6 +72,13 @@ source-deletion transaction inside the same command. Copy and replacement are
 checked separately for bodies beside and crossing the mirror plane. The audit
 records the executed cases and their per-version results.
 
+Nine further Sheet/blend/feature scenarios passed on both copies. Region patch
+clears source selection inside its command to prevent an awaiting interactive
+move after commit. Face-property validation accepts native periodic curved
+faces with equal total/inner loop counts, while retaining planar outer-loop
+and native-validity checks. The [audit](plasticity-26-2-catalog-audit.md)
+records exact areas, volumes, bore depths, Undo/Redo and remaining gaps.
+
 ## Initial live coverage
 
 The same checkout and production adapter were used against both disposable
