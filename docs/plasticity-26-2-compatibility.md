@@ -86,6 +86,15 @@ preservation, native geometry, one history step, Undo/Redo and cleanup. No
 production adapter change was required for this group; the audit records each
 version's completed fixtures.
 
+The alignment/projection continuation passed nine scenarios on both versions,
+including translational vertex/edge/cylinder alignment, Line projection,
+analytic body-imprint/dissolve, Sheet edits, draft and semantic-selection
+rebinding through move/Undo/Redo. Its strict circular curve-imprint case remains
+unaccepted on both versions: native Check passes, but SPCurve length and nominal
+mass/bounds do not meet the stated qualification. This was not classified as a
+26.2 adapter regression; tolerances were retained and the matrix records the
+failed case separately.
+
 ## Initial live coverage
 
 The same checkout and production adapter were used against both disposable

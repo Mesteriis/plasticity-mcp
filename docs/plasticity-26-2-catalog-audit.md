@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-25. The current continuation starts from merged PR #16
-(`4d2b7c7063388117054bab6a456e3512a8d719eb`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-25. The current continuation starts from merged PR #17
+(`464b093ad4da534c746104c047b1adbf10a2ab0f`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 100 | 108 |
-| Failing or blocked fixtures | 4 | 4 |
-| Tools with success in an application-connected passing fixture | 198 | 241 |
-| Tools attempted only in unaccepted fixtures | 7 | 7 |
-| Tools without a recorded application-connected live call | 166 | 123 |
+| Completed passing fixtures | 109 | 117 |
+| Failing or blocked fixtures | 5 | 5 |
+| Tools with success in an application-connected passing fixture | 212 | 254 |
+| Tools attempted only in unaccepted fixtures | 8 | 8 |
+| Tools without a recorded application-connected live call | 151 | 109 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -220,6 +220,53 @@ are checked where applicable. Linear tolerance is 0.00001 mm and volume/area
 tolerance is 0.0001 mm³/mm². Sweep uses an explicit rectangular profile and
 simplification; these cases do not accept every curved sweep, loft guide, offset
 self-intersection or Sheet closure configuration.
+
+## Alignment, projection and semantic selections
+
+Nine scenarios passed and one strict circular-imprint qualification failed on
+each version. No production adapter change was made in this continuation.
+
+`npm run accept:native-align-project -- --target ID --allow-disposable-mutations
+--case CASE --output NEW_DIRECTORY` selects ten guarded scenarios:
+
+| Case | Assertions |
+| --- | --- |
+| `align-vertices` | Move a 2 × 4 × 6 mm box from the origin so its minimum corner reaches a target corner at [20,10,0] plus [1,2,3] mm; keep the target fixed and both 48 mm³ volumes |
+| `align-edges` | Align corresponding parallel bottom Line edges by translation; moving bounds become [20,10,0]–[22,14,6] mm and the reference body remains fixed |
+| `align-cylinders` | Coaxial alignment with `preserve` axial mode; source R2 cylinder keeps Z=0…6 mm and reaches X/Y=20/10, while the R3 target at Z=4…12 remains fixed; volumes 24π/72π mm³ |
+| `project-curve` | Project a Line from Z=15 to the box top at Z=10; exact endpoints [2,5,10]/[8,5,10] mm and length 6 mm; source Wire and 1000 mm³ box remain |
+| `imprint-curve` | Strict nominal-box/circle qualification for projecting an R2 circle; retained as an unaccepted case when native measurements miss the gate described below |
+| `dissolve-face` | Prepare an analytic circular split with a crossing R2 cylinder and public body-body imprint; dissolve the inner planar disk, restoring 6/12 box topology and 1000 mm³ volume; the cylinder remains unchanged |
+| `patch-hole` | Fill the four boundary edges of a five-face open box Sheet, restoring one native-valid 1000 mm³ Solid with 6/12 topology |
+| `extend-sheet` | Extend the right edge of a 20 × 10 mm planar Sheet by 5 mm; bounds 25 × 10 mm, one face/four edges, area 250 mm², perimeter 70 mm; original profile remains |
+| `draft-faces` | Draft four sides of a 10 mm cube by +5° about its bottom plane; height stays 10 mm, horizontal bounds expand by 10 tan(5°) on each side; volume 1000[1 + 2t + (4/3)t²] mm³, t=tan(5°) |
+| `named-selection` | Find four vertical Line edges, save and list a semantic query, move the box by Z=5 mm, re-evaluate fresh edge IDs/centers after move, Undo and Redo, then delete the selection without changing CAD revision |
+
+Positive geometry cases require one native history step, native validity,
+volumes/bounds/topology as applicable, an unchanged source snapshot after Undo,
+stable Redo IDs, repeated assertions and final empty-scene cleanup. Alignment
+coverage here is translational with zero extra rotation, not every rotational
+or anti-parallel configuration. Named-selection metadata operations add no
+history; the associated native move supplies the checked Undo/Redo step.
+Linear tolerance is 0.00001 mm and volume tolerance is 0.0001 mm³. Native
+body-body imprint is independently checked as preparation for dissolve.
+
+### Unaccepted circular curve imprint
+
+The R2 source circle at [5,5,15] mm projected along −Z onto a 10 mm cube
+committed a native-valid 7-face/13-edge Solid with all seven carriers reported
+as Plane. Its new edge was `SPCurve`, with length about 12.567634 mm rather than
+an analytic Circle descriptor. Native mass reported about 999.999612 mm³ and
+the body bounds reached Z=10.05 mm. Both versions returned the same edge type,
+length, bounds and mass values within floating-point rounding. These miss the unchanged nominal-box
+qualification; the 0.0001 mm³ and 0.00001 mm gates were not relaxed.
+
+This is recorded as an unaccepted measurement case, not as a native validity
+failure or a proven adapter regression. The bounding-box discrepancy alone
+does not establish a physical bulge; this pass did not certify a tighter bound
+for the SPCurve. No analytic-circle equivalence is claimed. The separate
+body-body imprint/dissolve path uses an analytic intersection and does not
+establish dissolve acceptance for this SPCurve output.
 
 ## Compatibility fixes found by the audit
 
