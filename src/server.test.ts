@@ -15,6 +15,7 @@ import { frameFromOriginNormalX } from "./plasticity/construction.ts";
 import { PlasticityOperations } from "./plasticity/operations.ts";
 import type { PlasticityRuntime, RuntimeState } from "./plasticity/runtime.ts";
 import { PrintedThreadQualificationStore } from "./printing/thread-qualification.ts";
+import { catalogScore } from "./tool-catalog.ts";
 import { StepImportReferenceStore } from "./plasticity/import-reference-store.ts";
 import { ConstructionHistoryStore } from "./plasticity/construction-history.ts";
 import { StrengthStore } from "./strength/store.ts";
@@ -1295,6 +1296,23 @@ test("Codex tool router catalogs and validates every registered operation", asyn
   } while (true);
   assert.equal(catalogTotal, registered.tools.length - 1);
   assert.equal(catalogNames.size, catalogTotal, "catalog pages must cover every registered operation without duplicates");
+  const catalogEntries = registered.tools
+    .filter((tool) => tool.name !== "plasticity_call")
+    .map((tool) => ({ name: tool.name, description: tool.description ?? "" }));
+  for (const [words, expected] of [
+    ["translate move bodies", "plasticity_move"],
+    ["delete bodies", "plasticity_delete"],
+    ["sew join sheets", "plasticity_join_sheets"],
+    ["polyline line segment", "plasticity_create_polyline"],
+    ["check body validity", "plasticity_validate_bodies"],
+  ] as Array<[string, string]>) {
+    const ranked = parseToolJson(await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query: words, limit: 3 } }));
+    assert.equal((ranked.tools as Array<{ name: string }>)[0]?.name, expected, `"${words}" must rank ${expected} first`);
+    const scores = catalogEntries.map((tool) => ({ name: tool.name, score: catalogScore(words, tool) }))
+      .sort((left, right) => right.score - left.score);
+    assert.ok(scores[0]!.score > scores[1]!.score,
+      `"${words}" must rank ${expected} first on score, not on name order: ${JSON.stringify(scores.slice(0, 3))}`);
+  }
 
   const invalid = await client.callTool({ name: "plasticity_call", arguments: {
     toolName: "plasticity_create_box",
