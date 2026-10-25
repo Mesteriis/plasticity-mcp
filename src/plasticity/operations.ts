@@ -1988,11 +1988,11 @@ export class PlasticityOperations {
         return group;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      const keys = [
-        ...args.bodyIds.map(id => this.db.nodes.item2key(find(id))),
-        ...args.instanceIds.map(id => this.db.nodes.item2key(findEmpty(id))),
-        ...args.referenceMeshIds.map(id => this.db.nodes.item2key(findReferenceMesh(id))),
-        ...args.groupIds.map(id => this.db.nodes.item2key(findGroup(id))),
+      const items = [
+        ...args.bodyIds.map(find),
+        ...args.instanceIds.map(findEmpty),
+        ...args.referenceMeshIds.map(findReferenceMesh),
+        ...args.groupIds.map(findGroup),
       ];
       this.selection.selected.removeAll();
       const editor = this;
@@ -2001,10 +2001,18 @@ export class PlasticityOperations {
       command.remember = false;
       command.execute = async function () {
         try {
-          for (const key of keys) {
-            if (args.flag === 'visibility') editor.db.nodes.setVisible(key, args.value);
-            else editor.db.nodes.setLocked(key, args.value);
+          // Like the outliner's ToggleVisibilityCommand, commit a database transaction: its pipeline
+          // updates the node flags, the scene cache and the render list, and builds GPU meshes for
+          // bodies that were hidden since load. Writing the node flags directly skips all of that.
+          const transaction = editor.db.makeTransaction();
+          for (const item of items) {
+            if (args.flag === 'visibility') {
+              if (args.value) transaction.makeVisible(item);
+              else transaction.makeInvisible(item);
+            } else if (args.value) transaction.lock(item);
+            else transaction.unlock(item);
           }
+          await editor.db.commit(transaction);
         } catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
@@ -9596,24 +9604,15 @@ export class PlasticityOperations {
     const header = await readFile(input);
     if (header.length < 24 || header.subarray(0, 10).toString() !== "plasticity") throw new Error("Input is not a valid Plasticity document");
     await this.saveCopy(backupPath);
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    const opened = await this.runtime.mutate<{ filename: string }>(`async function (args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      const editor = this;
-      let failure;
-      const command = new Command(this);
-      command.remember = false;
-      command.execute = async function () {
-        try {
-          const factory = new Factory(editor).resource(this);
-          factory.filename = args.path;
-          return await factory.commit();
-        } catch (error) { failure = error; throw error; }
-      };
-      await this.exec(command);
-      if (failure) throw failure;
-      this.document.filename = args.path;
-    }`, ["OpenFileFactory", "OpenFileCommand"], [{ path: input }]);
-    return await this.state();
+      // The native open path also replaces the scene and resets document history.
+      // Committing OpenFileFactory directly skips that lifecycle.
+      await this.open(args.path);
+      return { filename: this.document.filename };
+    }`, [], [{ path: input }], LONG_NATIVE_IMPORT_TIMEOUT_MS);
+    if (await realpath(opened.filename) !== input) throw new Error("Plasticity did not open the requested document");
+    return await this.state(LONG_NATIVE_IMPORT_TIMEOUT_MS);
   }
 
   async screenshot(outputPath: string): Promise<{ path: string; bytes: number }> {

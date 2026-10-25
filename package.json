@@ -100,6 +100,7 @@
     "accept:native-curve-pattern": "node scripts/verify-native-curve-pattern-live.ts",
     "accept:instances": "node scripts/verify-native-instances-live.ts",
     "accept:groups": "node scripts/verify-native-groups-live.ts",
+    "accept:visibility-after-load": "node scripts/verify-visibility-after-load-live.ts",
     "accept:interference": "node scripts/verify-native-interference-live.ts",
     "accept:native-topology-cache": "node scripts/verify-native-topology-cache-live.ts",
     "benchmark:native-state-memory": "node scripts/benchmark-native-state-memory.ts",
