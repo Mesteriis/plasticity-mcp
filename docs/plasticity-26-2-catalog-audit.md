@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-25. The current continuation starts from merged PR #15
-(`5cd8ccfb063687cd15475c886e434d970f3ea4b1`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-25. The current continuation starts from merged PR #16
+(`4d2b7c7063388117054bab6a456e3512a8d719eb`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 90 | 98 |
+| Completed passing fixtures | 100 | 108 |
 | Failing or blocked fixtures | 4 | 4 |
-| Tools with success in an application-connected passing fixture | 188 | 231 |
+| Tools with success in an application-connected passing fixture | 198 | 241 |
 | Tools attempted only in unaccepted fixtures | 7 | 7 |
-| Tools without a recorded application-connected live call | 176 | 133 |
+| Tools without a recorded application-connected live call | 166 | 123 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -188,6 +188,38 @@ inner-loop count on a periodic carrier is not a planar hole count. Unit coverage
 checks the valid cylinder and preserves rejection of planar equality and
 impossible curved-face counts. This change does not accept zero-boundary closed
 faces or claim support for every periodic/degenerate configuration.
+
+## Profiles, lofts and Sheet closure
+
+All ten scenarios passed on each experimental copy. No production adapter
+change was required for this group.
+
+`npm run accept:native-profiles-lofts -- --target ID --allow-disposable-mutations
+--case CASE --output NEW_DIRECTORY` selects ten guarded scenarios:
+
+| Case | Independent assertions |
+| --- | --- |
+| `offset-outward` | R5 circular Wire plus a separate R7 result for +2 mm |
+| `offset-inward` | R5 circular Wire plus a separate R3 result for −2 mm |
+| `region-offsets` | One Region offset by +2 and −1 mm creates R7/R4 Wires and retains the original R5 Wire |
+| `extend-endpoints` | Both ends of a 10 mm Line extend by 2 mm; final endpoints X=−2 and 12 mm, total length 14 mm |
+| `extract-edges` | Four top edges of a 10 mm cube become a separate closed four-Line Wire at Z=10; source topology and volume 1000 mm³ remain intact |
+| `loft-regions` | R5 circles at Z=0/10 loft to one capped Solid of volume 250π mm³; both profiles remain |
+| `sweep-regions` | Centered 4 × 3 mm rectangular Region sweeps along a 20 mm straight spine; volume 240 mm³ and exact bounds; profile and spine remain |
+| `join-sheets` | Perpendicular 20 × 10 and 20 × 5 mm planar Sheets join into one two-face/seven-edge Sheet; area 300 mm² and summed face boundaries 110 mm; both profiles remain |
+| `cap-sheet` | Delete the top cube face to obtain a five-face Sheet, then cap it into a native-valid 1000 mm³ Solid with six faces and twelve edges |
+| `solid-from-sheet` | Copy all six cube faces to a closed Sheet, then create a separate 1000 mm³ Solid; original Solid and Sheet remain unchanged |
+
+Each main operation requires one history step, Undo to the complete source
+snapshot, stable result IDs after Redo, repeated geometry checks, and cleanup
+to the empty initial snapshot. Preparation also exercises public face deletion.
+Curve offsets are checked through native circular geometry, center and length;
+profiles for lofting are ordered using native Wire bounds and Region ownership,
+not their display meshes. Solid/Sheet validation, exact volumes/areas and bounds
+are checked where applicable. Linear tolerance is 0.00001 mm and volume/area
+tolerance is 0.0001 mm³/mm². Sweep uses an explicit rectangular profile and
+simplification; these cases do not accept every curved sweep, loft guide, offset
+self-intersection or Sheet closure configuration.
 
 ## Compatibility fixes found by the audit
 

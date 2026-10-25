@@ -79,6 +79,13 @@ faces with equal total/inner loop counts, while retaining planar outer-loop
 and native-validity checks. The [audit](plasticity-26-2-catalog-audit.md)
 records exact areas, volumes, bore depths, Undo/Redo and remaining gaps.
 
+The profile/closure continuation adds signed Wire and Region offsets, endpoint
+extension, edge extraction, Region loft/sweep, Sheet joining/capping and
+separate Solid creation from a closed Sheet. Its guarded cases check source
+preservation, native geometry, one history step, Undo/Redo and cleanup. No
+production adapter change was required for this group; the audit records each
+version's completed fixtures.
+
 ## Initial live coverage
 
 The same checkout and production adapter were used against both disposable
