@@ -61,8 +61,9 @@ on both success and rejection. Remote debugging remains bound to loopback.
 The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every
 registered tool with independent per-version evidence and explicit gaps. It
 adds deformation, refinement, reference meshes, interference, dimensions,
-sections, fastener workflows and SVG checks. Two native 26.2 failures remain
-unresolved; the audit does not claim acceptance of all 371 tools.
+sections, fastener workflows and SVG checks. The follow-up fixes hollow-shell unjoin and shell-vertex offset, and resolves the
+26.1 native-open confirmation timeout. The final six-scenario regression passed
+on both versions; the audit does not claim acceptance of all 371 tools.
 
 ## Initial live coverage
 

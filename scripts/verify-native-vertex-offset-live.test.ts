@@ -20,3 +20,11 @@ test("native-vertex-offset acceptance rejects unknown and incomplete arguments",
   assert.throws(() => parseNativeVertexOffsetAcceptanceArgs(["--target"]), /requires/u);
   assert.throws(() => parseNativeVertexOffsetAcceptanceArgs(["--output"]), /requires/u);
 });
+
+
+test("vertex-offset acceptance validates explicit shared-edge and circular fixtures", () => {
+  const guards = ["--target", "window", "--allow-disposable-mutations", "--output", "/tmp/evidence"];
+  for (const fixture of ["opposite-corners", "adjacent-corners", "circular-edge"] as const) assert.equal(parseNativeVertexOffsetAcceptanceArgs([...guards, "--case", fixture]).fixtureCase, fixture);
+  assert.throws(() => parseNativeVertexOffsetAcceptanceArgs([...guards, "--case", "unknown"]), /--case requires/);
+  assert.throws(() => parseNativeVertexOffsetAcceptanceArgs(["--case", "adjacent-corners"]), /--target/);
+});

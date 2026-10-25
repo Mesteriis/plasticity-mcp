@@ -368,6 +368,8 @@ export class PlasticityRuntime {
       // every walk of a large document's topology costs hundreds of MB. A
       // body version's topology is immutable: read it once per body view
       // and versionId and reuse it across state reads.
+      // Invalidate descriptors from an older adapter even when the body view is unchanged.
+      const topologyFormat = 2;
       const topologyCacheKey = Symbol.for('plasticity-mcp.body-topology');
       const topologyCache = globalThis[topologyCacheKey] ?? (globalThis[topologyCacheKey] = new WeakMap());
       const readTopology = (item, bodyType) => {
@@ -500,9 +502,11 @@ export class PlasticityRuntime {
             if (!Number.isInteger(vertexId) || verticesById.has(vertexId)) continue;
             const vertexEdges = vertex.GetEdges?.();
             const adjacentVertexEdgeIds = [];
-            for (let edgeIndex = 0; edgeIndex < (vertexEdges?.Size?.() ?? 0); edgeIndex += 1) {
-              const adjacentId = edgeIdByEntity.get(vertexEdges.Get(edgeIndex).Id());
-              if (adjacentId) adjacentVertexEdgeIds.push(adjacentId);
+            for (const collection of vertexEdges?.in && vertexEdges?.out ? [vertexEdges.in, vertexEdges.out] : [vertexEdges]) {
+              for (let edgeIndex = 0; edgeIndex < (collection?.Size?.() ?? 0); edgeIndex += 1) {
+                const adjacentId = edgeIdByEntity.get(collection.Get(edgeIndex).Id());
+                if (adjacentId && !adjacentVertexEdgeIds.includes(adjacentId)) adjacentVertexEdgeIds.push(adjacentId);
+              }
             }
             const vertexFaces = vertex.GetFaces?.();
             const adjacentVertexFaceIds = [];
@@ -546,10 +550,10 @@ export class PlasticityRuntime {
         const bodyType = item.view?.constructor?.name ?? 'Unknown';
         const view = item.view !== null && typeof item.view === 'object' ? item.view : null;
         const cached = view ? topologyCache.get(view) : undefined;
-        let topology = cached?.versionId === versionId ? cached.topology : null;
+        let topology = cached?.format === topologyFormat && cached.versionId === versionId ? cached.topology : null;
         if (!topology) {
           topology = readTopology(item, bodyType);
-          if (view) topologyCache.set(view, { versionId, topology });
+          if (view) topologyCache.set(view, { format: topologyFormat, versionId, topology });
         }
         const key = nativeApi.db.nodes?.item2key?.(item.view);
         const name = key === undefined ? null : (nativeApi.db.nodes?.getName?.(key) ?? null);

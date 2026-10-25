@@ -29,14 +29,17 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 57 | 65 |
-| Failing or blocked fixtures | 6 | 6 |
-| Tools with success in a passing fixture | 155 | 193 |
-| Tools attempted only in unaccepted fixtures | 7 | 12 |
-| Tools without a recorded live call | 209 | 166 |
+| Completed passing fixtures | 62 | 70 |
+| Failing or blocked fixtures | 4 | 4 |
+| Tools with success in an application-connected passing fixture | 161 | 204 |
+| Tools attempted only in unaccepted fixtures | 7 | 7 |
+| Tools without a recorded application-connected live call | 203 | 160 |
 
 The different counts reflect the executed scenarios, not a claim that the
-remaining tools fail or that 26.1 has lost support.
+remaining tools fail or that 26.1 has lost support. An additional host-only stdio
+fixture passed for three CSV/test-store tools. It uses synthetic tensile and
+fracture CSV files, verifies units, provenance and preview isolation, and never
+connects to Plasticity; its coverage is recorded separately in the matrix.
 
 ## Compatibility fixes found by the audit
 
@@ -84,16 +87,65 @@ recording `viewportValidation: "not-run"`. The default retains its full rendered
 annotation assertions. Manual UI edits now reject non-interactive stdin before
 creating output or changing CAD.
 
-## Remaining failures and unverified areas
+## Resolved native failures
+
+The final identical six-scenario regression passed **6/6 on each application
+copy**: opposite-corner, adjacent-corner and circular-edge vertex offsets; full
+face construction including hollow-shell unjoin; topology caching with native
+reopen; and split-solid/print-joint recipes. The 26.1 run used its default
+background throttling. No manual confirmation was needed in these final runs.
+
+### Hollow-shell unjoin
+
+The 26.2 shell and face unjoin factories both returned
+`PK_FACE_remove_to_solid_bodies` / `PK_ERROR_general_body (1071)` for the valid
+closed hollow Solid. The adapter now uses the native face-extraction factory
+once per face and replaces all input shells in one native factory commit. The
+legacy shell factory remains unchanged. Both versions passed twelve independent
+one-face Sheets, exact topology and coordinates, one Undo step, Redo, and cleanup.
+
+### Shell-vertex offset
+
+The 26.2 station walker failed on the branching shell vertices. Its adapter now
+enumerates the actual incoming/outgoing native incident-edge collections, uses
+native carrier `GetLength` queries to solve each requested arc-length station,
+and submits one native `Operation.SplitEdges` report. Existing factory commit,
+constraint/remap and result hooks remain in place. The 26.1 calculate path is
+unchanged. Incident-edge descriptors now combine both directed collections and
+deduplicate their public edge references.
+
+Both versions passed opposite corners, adjacent corners sharing an edge, and a
+half-cylinder vertex incident to a circular edge. They preserved stable body ID,
+name, volume and centroid, with one history step and correct Undo/Redo. Unit
+coverage also checks nonlinear length/parameter inversion, shared stations,
+legacy behavior and pre-operation distance rejection. This is not live evidence
+for every spline or degenerate-edge configuration.
+
+### Native document-open timeout
+
+Accessibility inspection identified the actual blocker: Plasticity's native
+**unsaved changes** confirmation. A raw saver copy did not finish the native
+save lifecycle. Window focus was a symptom of that modal prompt, not the cause;
+the diagnostic focus guard was removed.
+
+`plasticity_open_document` first writes its validated exclusive backup, then
+associates the current document with that explicit backup path and calls native
+Editor save before native open. The previous document file is not overwritten.
+If native opening fails after saving, the current scene remains associated with
+the saved backup. Tests verify ordering, save failure, untouched prior files and
+that open is never invoked when backup saving fails. Native cache/reopen and
+rational STEP/SVG acceptance subsequently passed on 26.1 without a modal prompt.
+
+## Areas still unverified
 
 | Area | 26.1.3 | Experimental 26.2.1 | Disposition |
 | --- | --- | --- | --- |
-| Unjoin faces of the valid hollow-box fixture | Passed | Native `PK_FACE_remove_to_solid_bodies`, `PK_ERROR_general_body (1071)` | Unresolved; no geometry workaround or weaker assertion was introduced |
-| Shell-vertex offset fixture | Passed | Native `failed to locate split stations` | Unresolved after resolving real vertex snaps |
-| Rendered measurements, section overlays, group screenshots | Current run blocked by hidden renderer / no visible macOS window | Same | Geometry-only measurements passed; current visual evidence is not accepted |
-| Manual UI edits | Requires real interactive gesture | Same | Non-interactive execution is rejected before CAD mutation |
-| Cached topology, linked source edits and native reopen | Latest rerun timed out during native open; outcome uncertain, subsequent mutations stopped | Passed | Earlier 26.1 pass does not replace the current timeout |
-| Rational STEP/SVG fixture | Fresh clean-history precondition not met in the combined run | Passed in a fresh document | 26.1 rerun remains pending |
+| Rendered measurements, section overlays, group screenshots | Earlier run blocked by hidden renderer / unavailable visible window | Same | Geometry-only measurements passed; those visual fixtures were not reaccepted |
+| Manual UI edits | Requires interactive gesture | Same | Unattended execution is rejected before CAD mutation |
+
+The continued catalog pass also completed the split-solid/print-joint suite on
+both versions, including volume conservation, native validation and cleanup.
+The rational STEP/SVG fixture now passed on both copies in a fresh document.
 
 The official unmodified 26.2.1 distribution still fails the inspector-fuse
 preflight. This audit does not change its startup protection. Workbench, external
@@ -104,9 +156,9 @@ operations without a dedicated completed fixture.
 
 ## Automated gates
 
-`npm test`: 1399 passed, 0 failed. `npm run typecheck`: passed.
+`npm test`: 1405 passed, 0 failed. `npm run typecheck`: passed.
 Workbench: 90 tests passed, typecheck passed, production build passed. The
 production build retains its advisory warning about chunks larger than 500 kB.
-A focused discovery regression also verifies that 26.2 geometry conversion
-resolves to the native history command. These gates are separate from live CAD
+Regression tests also cover the native factory adapters, directed vertex
+adjacency and save-before-open lifecycle. These gates are separate from live CAD
 acceptance and do not turn unobserved catalog entries into passes.

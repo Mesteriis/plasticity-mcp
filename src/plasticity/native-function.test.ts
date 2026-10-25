@@ -192,3 +192,89 @@ test("point measurements read each version's actual native point-snap batch", ()
   batch.lookups.length = 0;
   assert.throws(() => call.call(modern), /inconsistent/);
 });
+
+test("shell unjoin extracts each face once and replaces all modern inputs in one factory", async () => {
+  const faces = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  const shells = [
+    { high: { faces: { length: 2, get: (index: number) => faces[index] } } },
+    { high: { faces: { length: 1, get: () => faces[2] } } },
+  ];
+  const editor = { db: { commit() {} }, geo: { read: { geometryModel: new Map() } } };
+  const seen: unknown[] = [];
+  class Sheets {
+    faces: unknown[] = [];
+    constructor(value: unknown) { assert.equal(value, editor); }
+    async calculate(partition: unknown) {
+      assert.equal(partition, "native-partition");
+      assert.equal(this.faces.length, 1);
+      seen.push(this.faces[0]);
+      return [{ GetFaces: () => ({ Size: () => 1 }) }];
+    }
+  }
+  const originalCalculate = Sheets.prototype.calculate;
+  const call = Function(`return (${nativeFunction`function (Sheets, shells) { return nativeApi.createUnjoinFactory(null, Sheets, shells); }`})`)();
+  const factory = call.call(editor, Sheets, shells);
+  assert.equal(factory.originalItems, shells);
+  assert.equal((await factory.calculate("native-partition")).length, 3);
+  assert.deepEqual(seen, faces);
+  assert.equal(Sheets.prototype.calculate, originalCalculate, "the native prototype must remain unchanged");
+  class InvalidSheets extends Sheets { async calculate() { return [{ GetFaces: () => ({ Size: () => 2 }) }]; } }
+  await assert.rejects(call.call(editor, InvalidSheets, shells).calculate("native-partition"), /one Sheet per face/);
+});
+
+test("legacy shell unjoin retains the native shell factory", () => {
+  const editor = { db: {}, geo: { geometryModel: new Map() } };
+  class Shells { shells: unknown[] = []; constructor(value: unknown) { assert.equal(value, editor); } }
+  const shells = [{}];
+  const call = Function(`return (${nativeFunction`function (Shells, shells) { return nativeApi.createUnjoinFactory(Shells, null, shells); }`})`)();
+  const factory = call.call(editor, Shells, shells);
+  assert.ok(factory instanceof Shells);
+  assert.equal(factory.shells, shells);
+});
+
+test("modern shell offset uses native arc lengths for both ends of a curved shared edge", async () => {
+  const point = (x: number) => ({ x, y: 0, z: 0 });
+  const edge = {
+    Id: () => 7, FindLength: () => ({ length: 0.01 }), Denormalize: (t: number) => t,
+    GetCurve: () => ({ curve: { GetLength: (a: number, b: number) => 0.01 * (b * b - a * a) } }),
+    GetPointAndTangent: (t: number) => ({ position: point(0.01 * t * t) }),
+  };
+  const collection = { Size: () => 1, Get: () => edge };
+  const vertices = [0, 0.01].map(x => ({ GetPoint: () => point(x), GetEdges: () => ({ in: collection, out: collection }) }));
+  const snaps = vertices.map(model => ({ model, item: {}, position: {} }));
+  const report = {}, calls: Array<{ edges: number[]; parameters: number[] }> = [];
+  class Operation {
+    constructor(context: unknown) { assert.equal(context, 'native-context'); }
+    async SplitEdges_async(edges: Int32Array, parameters: Float64Array) {
+      calls.push({ edges: [...edges], parameters: [...parameters] });
+      return { vertices: Int32Array.from(parameters, (_, index) => 100 + index), report };
+    }
+  }
+  const kernel = { Operation, Context: { Get: () => 'native-context' } };
+  const editor = { db: { commit() {} }, geo: { read: { geometryModel: new Map() } } };
+  const constraints = () => {};
+  const factory = { distance: 0.002, _vertices: { models: vertices, views: [] }, prepareConstraints: constraints, resultFromCommit: constraints };
+  const call = Function(`return (${nativeFunction`function (factory, snaps, kernel) { nativeApi.configureOffsetVertices(factory, snaps, kernel); }`})`)();
+  call.call(editor, factory, snaps, kernel);
+  assert.equal(await (factory as any).calculate(), report);
+  assert.deepEqual(calls[0]!.edges, [7, 7]);
+  for (const [index, expected] of [Math.sqrt(0.2), Math.sqrt(0.8)].entries()) assert.ok(Math.abs(calls[0]!.parameters[index]! - expected) < 1e-9);
+  assert.equal(factory.prepareConstraints, constraints);
+  assert.equal(factory.resultFromCommit, constraints);
+  factory.distance = 0.005;
+  await (factory as any).calculate();
+  assert.equal(calls[1]!.parameters.length, 1, "coincident stations must be split only once");
+  factory.distance = 0.01;
+  await assert.rejects((factory as any).calculate(), /shorter than every incident edge/);
+  assert.equal(calls.length, 2, "invalid distances must not invoke the native operation");
+});
+
+test("legacy shell offset keeps the original calculate path and ownership bridge", () => {
+  const editor = { db: {}, geo: { geometryModel: new Map() } };
+  const calculate = () => {}, model = {}, item = {}, position = {};
+  const factory = { calculate, _vertices: { views: [] } };
+  const call = Function(`return (${nativeFunction`function (factory, snaps) { nativeApi.configureOffsetVertices(factory, snaps); }`})`)();
+  call.call(editor, factory, [{ model, item, position }]);
+  assert.equal(factory.calculate, calculate);
+  assert.deepEqual(factory._vertices.views, [{ parentItem: item, position }]);
+});

@@ -82,7 +82,7 @@ test("reads a body version's native topology once and reuses it until the body c
   class Solid {}
   class Plane {}
   const makeItem = () => {
-    const vertex = { Id: () => 7, GetPoint: () => point(0, 0, 0), GetEdges: () => undefined, GetFaces: () => undefined };
+    const vertex = { Id: () => 7, GetPoint: () => point(0, 0, 0), GetEdges: (): any => ({ in: { Size: () => 1, Get: () => edge }, out: { Size: () => 1, Get: () => edge } }), GetFaces: () => undefined };
     const face = {
       Id: () => 101,
       FindMidpoint: () => ({ position: point(0.001, 0, 0), normal: point(0, 0, 1) }),
@@ -158,12 +158,18 @@ test("reads a body version's native topology once and reuses it until the body c
   const bindings = (runtime as unknown as { bindings: Map<string, string> }).bindings;
   for (const name of Object.keys(natives)) bindings.set(name, name);
 
+  const cacheKey = Symbol.for("plasticity-mcp.body-topology");
+  const cache = Reflect.get(globalThis, cacheKey) ?? new WeakMap();
+  cache.set(geometryModel.get(21)!.view, { versionId: 21, topology: { boundsMm: null, faces: [], edges: [], vertices: [], faceIds: [], edgeIds: [] } });
+  Reflect.set(globalThis, cacheKey, cache);
   const first = await runtime.getState();
   const second = await runtime.getState();
   assert.deepEqual(calls, { FindBox: 1, GetFaces: 1, GetEdges: 1 });
   assert.deepEqual(second.bodies, first.bodies);
+  assert.equal(cache.get(geometryModel.get(21)!.view).format, 2, "old adapter cache entries must be rebuilt");
   assert.equal(first.bodies[0]?.faces[0]?.id, "11");
   assert.deepEqual(first.bodies[0]?.edges[0]?.faceIds, ["11"]);
+  assert.deepEqual(first.bodies[0]?.vertices?.[0]?.edgeIds, ["12"], "incoming and outgoing vertex edges must be combined without duplicates");
   assert.deepEqual(first.bodies[0]?.boundsMm, { min: [0, 0, 0], max: [2, 1, 0] });
 
   editor.db.nodes.getName = () => "Renamed plate";

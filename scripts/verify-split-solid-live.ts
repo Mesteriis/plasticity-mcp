@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -334,7 +336,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const output = toolText(response);
   if (typeof response === "object" && response !== null && "isError" in response && response.isError) throw new Error(output);
-  return JSON.parse(output);
+  return await hydrateNativeState(JSON.parse(output), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 function toolText(response: unknown): string {

@@ -18,6 +18,7 @@ export interface NativeVertexOffsetAcceptanceOptions {
   target?: string;
   allowDisposableMutations: boolean;
   output?: string;
+  fixtureCase?: "opposite-corners" | "adjacent-corners" | "circular-edge";
 }
 
 interface LiveMcp { client: Client; stderr: string[] }
@@ -29,7 +30,11 @@ export function parseNativeVertexOffsetAcceptanceArgs(argv: string[]): NativeVer
     const argument = argv[index];
     if (argument === "--help") options.help = true;
     else if (argument === "--allow-disposable-mutations") options.allowDisposableMutations = true;
-    else if (argument === "--target") {
+    else if (argument === "--case") {
+      const value = argv[++index];
+      if (value !== "opposite-corners" && value !== "adjacent-corners" && value !== "circular-edge") throw new Error("--case requires opposite-corners, adjacent-corners, or circular-edge");
+      options.fixtureCase = value;
+    } else if (argument === "--target") {
       const value = argv[++index];
       if (!value) throw new Error("--target requires an explicit Plasticity window ID");
       options.target = value;
@@ -54,7 +59,9 @@ With no arguments or --help, this command performs no connection and no mutation
 Live mode refuses a nonempty Plasticity document, never chooses a window
 automatically, offsets two opposite native shell vertices, verifies exact B-Rep
 topology, volume and Undo/Redo, cleans up with native Undo, and writes sanitized
-evidence to a new directory.`;
+evidence to a new directory.
+--case adjacent-corners tests two stations on a shared edge;
+--case circular-edge tests the circular and straight edges of a half cylinder.`;
 
 async function main(): Promise<void> {
   const options = parseNativeVertexOffsetAcceptanceArgs(process.argv.slice(2));
@@ -66,6 +73,7 @@ async function main(): Promise<void> {
     startedAt: new Date().toISOString(),
     targetId: options.target!,
     workbenchUsed: false,
+    fixtureCase: options.fixtureCase ?? "opposite-corners",
   };
   let live: LiveMcp | undefined;
   let initialState: any;
@@ -78,37 +86,53 @@ async function main(): Promise<void> {
     evidence.initial = stateSummary(initialState);
     const snapshot = await call(live.client, "plasticity_capture_snapshot", { label: "native-vertex-offset-live-initial-empty" });
 
-    let state = await call(live.client, "plasticity_create_box", {
-      originMm: [0, 0, 0], sizeMm: [20, 10, 10], name: "Vertex offset acceptance",
-      intent: "Create disposable source for native vertex-offset acceptance", revision: initialState.revision,
-    });
+    const cylinder = options.fixtureCase === "circular-edge";
+    const beforeTopology: [number, number, number] = cylinder ? [4, 6, 4] : [6, 12, 8];
+    const afterTopology: [number, number, number] = cylinder ? [4, 9, 7] : [6, 18, 14];
+    const expectedVolume = cylinder ? 125 * Math.PI : 2000;
+    const expectedCentroid: [number, number, number] = cylinder ? [20 / (3 * Math.PI), 0, 5] : [10, 5, 5];
+    let state = cylinder
+      ? await call(live.client, "plasticity_create_cylinder", { centerMm: [0, 0, 0], radiusMm: 5, heightMm: 10, name: "Vertex offset acceptance", intent: "Create disposable circular shell source", revision: initialState.revision })
+      : await call(live.client, "plasticity_create_box", { originMm: [0, 0, 0], sizeMm: [20, 10, 10], name: "Vertex offset acceptance", intent: "Create disposable source for native vertex-offset acceptance", revision: initialState.revision });
+    if (cylinder) {
+      const split = await call(live.client, "plasticity_split_solid_by_plane", { targetId: state.bodies[0].id, originMm: [0, 0, 0], normal: [1, 0, 0], xDirection: [0, 1, 0], intent: "Create real circular-edge shell vertices", revision: state.revision });
+      requireCondition(split.status === "completed" && split.resultBodyIds.length === 2, "Half-cylinder fixture split failed");
+      state = await call(live.client, "plasticity_status", {});
+      const positive = state.bodies.find((body: any) => Math.abs(body.boundsMm.min[0]) < 1e-7 && body.boundsMm.max[0] > 4.9);
+      requireCondition(positive, "Positive-X half cylinder was not found");
+      state = await call(live.client, "plasticity_delete", { ids: state.bodies.filter((body: any) => body.id !== positive.id).map((body: any) => body.id), intent: "Keep one disposable half-cylinder source", revision: state.revision });
+    }
     const source = requireSingleBody(state);
-    requireTopology(source, 6, 12, 8, "source body");
-    const sourceProperties = await exactProperties(live.client, source.id, state.revision);
-    const selected = [
-      requireVertex(source, [20, 10, 10]),
-      requireVertex(source, [0, 0, 0]),
-    ];
+    requireTopology(source, ...beforeTopology, "source body");
+    requireCondition(source.vertices.every((vertex: any) => vertex.edgeIds.length === 3), "Source vertex adjacency did not expose all three incident edges");
+    const sourceProperties = await exactProperties(live.client, source.id, state.revision, expectedVolume, expectedCentroid);
+    const selected = cylinder
+      ? [requireVertex(source, [0, 5, 10])]
+      : [requireVertex(source, [20, 10, 10]), requireVertex(source, options.fixtureCase === "adjacent-corners" ? [0, 10, 10] : [0, 0, 0])];
+    requireCondition(selected.length === (cylinder ? 1 : 2), "Expected exact source shell vertices");
     const beforeOffsetDepth = state.undoDepth;
     state = await call(live.client, "plasticity_offset_vertices", {
       vertices: selected.map((vertex: any) => ({ bodyId: source.id, vertexId: vertex.id })),
       distanceMm: 2,
-      intent: "Insert exact native split vertices two millimeters from two opposite corners",
+      intent: "Insert native split vertices two millimeters from the selected shell vertices",
       revision: state.revision,
     });
     requireCondition(state.undoDepth === beforeOffsetDepth + 1, "Two vertex offsets did not use one native history step");
     const offset = requireSingleBody(state);
     requireCondition(offset.id === source.id, "Native vertex offset changed the stable body ID");
     requireCondition(offset.name === source.name, "Native vertex offset changed the body name");
-    requireTopology(offset, 6, 18, 14, "offset body");
-    const expectedInserted = [
-      [18, 10, 10], [20, 8, 10], [20, 10, 8],
-      [2, 0, 0], [0, 2, 0], [0, 0, 2],
-    ] as Array<[number, number, number]>;
+    requireTopology(offset, ...afterTopology, "offset body");
+    let expectedInserted: Array<[number, number, number]>;
+    if (cylinder) {
+      const angle = 2 / 5;
+      expectedInserted = [[5 * Math.sin(angle), 5 * Math.cos(angle), 10], [0, 3, 10], [0, 5, 8]];
+    } else {
+      expectedInserted = [[18, 10, 10], [20, 8, 10], [20, 10, 8], ...(options.fixtureCase === "adjacent-corners" ? [[2, 10, 10], [0, 8, 10], [0, 10, 8]] : [[2, 0, 0], [0, 2, 0], [0, 0, 2]])] as Array<[number, number, number]>;
+    }
     const inserted = expectedInserted.map((position) => requireVertex(offset, position));
-    requireVertex(offset, [20, 10, 10]);
-    requireVertex(offset, [0, 0, 0]);
-    const offsetProperties = await exactProperties(live.client, offset.id, state.revision);
+    requireCondition(inserted.every((vertex: any) => vertex.edgeIds.length === 2), "Inserted vertices must connect exactly two split edges");
+    selected.forEach((vertex: any) => requireVertex(offset, vertex.positionMm));
+    const offsetProperties = await exactProperties(live.client, offset.id, state.revision, expectedVolume, expectedCentroid);
     near(offsetProperties.volumeMm3, sourceProperties.volumeMm3, 1e-6, "volume after vertex offset");
     vectorNear(offsetProperties.volumeCentroidMm, sourceProperties.volumeCentroidMm, 1e-8, "centroid after vertex offset");
     const validation = await call(live.client, "plasticity_validate_bodies", { ids: [offset.id], revision: state.revision });
@@ -116,10 +140,10 @@ async function main(): Promise<void> {
     requireCondition(validation.bodies.length === 1 && validation.bodies[0].nativeValid === true && validation.bodies[0].printableSolid === true && validation.bodies[0].nativeCheckCodes.length === 0, "Vertex-offset Solid failed native validation");
 
     state = await call(live.client, "plasticity_undo", { intent: "Verify native vertex-offset Undo", revision: state.revision });
-    requireTopology(requireSingleBody(state), 6, 12, 8, "vertex-offset Undo body");
+    requireTopology(requireSingleBody(state), ...beforeTopology, "vertex-offset Undo body");
     state = await call(live.client, "plasticity_redo", { intent: "Verify native vertex-offset Redo", revision: state.revision });
     const redone = requireSingleBody(state);
-    requireTopology(redone, 6, 18, 14, "vertex-offset Redo body");
+    requireTopology(redone, ...afterTopology, "vertex-offset Redo body");
     expectedInserted.forEach((position) => requireVertex(redone, position));
 
     evidence.vertexOffset = {
@@ -127,8 +151,8 @@ async function main(): Promise<void> {
       selectedVertices: selected.map((vertex: any) => ({ id: vertex.id, positionMm: vertex.positionMm })),
       distanceMm: 2,
       insertedVertices: inserted.map((vertex: any) => ({ id: vertex.id, positionMm: vertex.positionMm })),
-      topologyBefore: { faceCount: 6, edgeCount: 12, vertexCount: 8 },
-      topologyAfter: { faceCount: 6, edgeCount: 18, vertexCount: 14 },
+      topologyBefore: { faceCount: beforeTopology[0], edgeCount: beforeTopology[1], vertexCount: beforeTopology[2] },
+      topologyAfter: { faceCount: afterTopology[0], edgeCount: afterTopology[1], vertexCount: afterTopology[2] },
       exactPropertiesBefore: sourceProperties,
       exactPropertiesAfter: offsetProperties,
       stableBodyIdPreserved: true,
@@ -160,11 +184,11 @@ async function main(): Promise<void> {
   }
 }
 
-async function exactProperties(client: Client, id: number, revision: string): Promise<any> {
+async function exactProperties(client: Client, id: number, revision: string, volumeMm3: number, centroidMm: [number, number, number]): Promise<any> {
   const report = await call(client, "plasticity_measure_solid_properties", { ids: [id], revision });
   requireCondition(report.source === "native-brep-mass-properties" && report.bodies.length === 1 && report.bodies[0].id === id, "Exact solid-property evidence is unavailable");
-  near(report.bodies[0].volumeMm3, 2000, 1e-6, "solid volume");
-  vectorNear(report.bodies[0].volumeCentroidMm, [10, 5, 5], 1e-8, "solid centroid");
+  near(report.bodies[0].volumeMm3, volumeMm3, 1e-6, "solid volume");
+  vectorNear(report.bodies[0].volumeCentroidMm, centroidMm, 1e-8, "solid centroid");
   requireCondition(report.bodies[0].nativeCheckCodes.length === 0, "Solid-property measurement found native validation errors");
   return report.bodies[0];
 }

@@ -7429,12 +7429,22 @@ export class PlasticityOperations {
     if (invalid.length > 0) throw new Error(`Shell unjoin requires current Solid or Sheet bodies: ${invalid.join(", ")}`);
     const singleFace = ids.filter((id) => current.get(id)!.faceIds.length < 2);
     if (singleFace.length > 0) throw new Error(`Shell unjoin requires bodies with at least two faces: ${singleFace.join(", ")}`);
-    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, SheetFactory, args) {
       ${findView}
-      ${commandStart("UnjoinShellsCommand")}
-      factory.shells = args.ids.map(find);
-      ${commandEnd}
-    }`, ["UnjoinShellsFactory"], [{ ids }]);
+      if (this.executor.isBusy) throw new Error('Plasticity is busy');
+      const editor = this;
+      let failure;
+      const command = new this.commands.UnjoinShellsCommand(this);
+      command.remember = false;
+      command.execute = async function () {
+        try {
+          const factory = nativeApi.createUnjoinFactory(Factory, SheetFactory, args.ids.map(find)).resource(this);
+          return await factory.commit();
+        } catch (error) { failure = error; throw error; }
+      };
+      await this.exec(command);
+      if (failure) throw failure;
+    }`, ["UnjoinShellsFactory", "CreateSheetFromFacesFactory"], [{ ids }]);
     return await this.state();
   }
 
@@ -8119,7 +8129,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(distanceMm) || distanceMm <= 0) {
       throw new Error("Shell-vertex offset distance must be finite and positive");
     }
-    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, pk_default, args) {
       const wanted = new Set(args.vertices.map(reference => reference.bodyId + ':' + reference.vertexId));
       const selectedByKey = new Map();
       for (const entry of nativeApi.pointSnapEntries()) {
@@ -8143,18 +8153,14 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          factory.vertices = selectedSnaps.map(snap => snap.model);
-          if (!factory._vertices || !Array.isArray(factory._vertices.views)) {
-            throw new Error('Plasticity 26.1.3 shell-vertex ownership bridge is unavailable');
-          }
-          factory._vertices.views = selectedSnaps.map(snap => ({ parentItem: snap.item, position: snap.position }));
+          nativeApi.configureOffsetVertices(factory, selectedSnaps, pk_default.a);
           factory.distance = args.distance;
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
       await editor.exec(command);
       if (failure) throw failure;
-    }`, ["OffsetVertexFactory", "OffsetVertexCommand"], [{ vertices: references, distance: millimetersToMeters(distanceMm) }]);
+    }`, ["OffsetVertexFactory", "OffsetVertexCommand", "pk_default"], [{ vertices: references, distance: millimetersToMeters(distanceMm) }]);
     return await this.state();
   }
 
@@ -9580,11 +9586,16 @@ export class PlasticityOperations {
     await this.saveCopy(backupPath);
     const opened = await this.runtime.mutate<{ filename: string }>(`async function (args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
+      // A raw saver copy does not clear the native unsaved-changes prompt.
+      // Save through the editor lifecycle at the explicit backup path, never
+      // over the previous document. On open failure this remains the saved copy.
+      this.document.filename = args.backup;
+      await this.save();
       // The native open path also replaces the scene and resets document history.
       // Committing OpenFileFactory directly skips that lifecycle.
       await this.open(args.path);
       return { filename: this.document.filename };
-    }`, [], [{ path: input }], LONG_NATIVE_IMPORT_TIMEOUT_MS);
+    }`, [], [{ path: input, backup: await realpath(resolve(backupPath)) }], LONG_NATIVE_IMPORT_TIMEOUT_MS);
     if (await realpath(opened.filename) !== input) throw new Error("Plasticity did not open the requested document");
     return await this.state(LONG_NATIVE_IMPORT_TIMEOUT_MS);
   }
