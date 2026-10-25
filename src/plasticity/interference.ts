@@ -117,7 +117,8 @@ async function collectNativeIntersections(
       try {
         firstCopy = findModel(pair.firstBodyId).Clone();
         secondCopy = findModel(pair.secondBodyId).Clone();
-        const usedVersions = new Set(temporary.geometryModel.keys());
+        const models = temporary.read?.geometryModel ?? temporary.geometryModel;
+        const usedVersions = new Set(models.keys());
         while (usedVersions.has(ids.firstVersionId) || temporary.hasStableId(ids.firstStableId) ||
           usedVersions.has(ids.secondVersionId) || temporary.hasStableId(ids.secondStableId)) {
           ids.firstVersionId -= 4;
@@ -125,24 +126,23 @@ async function collectNativeIntersections(
           ids.secondVersionId -= 4;
           ids.secondStableId -= 4;
         }
-        const firstCvs = firstCopy.GetCVs();
-        const secondCvs = secondCopy.GetCVs();
+        const firstJob = nativeApi.temporaryModelData(firstCopy, ids.firstVersionId, ids.firstStableId);
+        const secondJob = nativeApi.temporaryModelData(secondCopy, ids.secondVersionId, ids.secondStableId);
         const views = await this.views.build([
-          { model: firstCopy, cvs: firstCvs, versionId: ids.firstVersionId, stableId: ids.firstStableId },
-          { model: secondCopy, cvs: secondCvs, versionId: ids.secondVersionId, stableId: ids.secondStableId },
+          firstJob, secondJob,
         ], 'real');
         firstView = views[0];
         secondView = views[1];
-        await temporary.addItem(firstCopy, firstCvs, firstView, ids.firstStableId, 'user');
-        await temporary.addItem(secondCopy, secondCvs, secondView, ids.secondStableId, 'user');
+        await nativeApi.addTemporaryItem(temporary, firstJob, firstView);
+        await nativeApi.addTemporaryItem(temporary, secondJob, secondView);
         factory = new BooleanFactory(temporaryEditor);
         factory.targets = [firstView];
         factory.tools = [secondView];
         factory.operationType = 15901;
         factory.keepTools = false;
         try {
-          const calculated = await factory.calculate(factory.partition);
-          const results = Array.isArray(calculated) ? calculated : [calculated].filter(Boolean);
+          const calculation = await nativeApi.calculateBoolean(factory, kernel_Solid);
+          const results = calculation.bodies;
           const intersectionBodies = results.map(body => {
             const box = body?.FindBox?.();
             return {
@@ -152,7 +152,9 @@ async function collectNativeIntersections(
               nativeCheckCodes: Array.from(body?.Check?.() ?? [-1], Number),
             };
           });
-          output = { ...pair, outcome: 'intersection', intersectionBodies };
+          output = calculation.noEffect
+            ? { ...pair, outcome: 'no-effect', error: 'Operation has no effect' }
+            : { ...pair, outcome: 'intersection', intersectionBodies };
         } catch (error) {
           const message = String(error?.message ?? error);
           output = /Operation has no effect/i.test(message)
@@ -164,10 +166,10 @@ async function collectNativeIntersections(
       } finally {
         try { if (factory) await factory.cancel(); } catch { cleanupFailed = true; }
         try {
-          if (secondView && temporary.geometryModel.has(ids.secondVersionId)) await temporary.removeItem(secondView, 'user');
+          if (secondView && (temporary.read?.geometryModel ?? temporary.geometryModel).has(ids.secondVersionId)) await temporary.removeItem(secondView, 'user');
         } catch { cleanupFailed = true; }
         try {
-          if (firstView && temporary.geometryModel.has(ids.firstVersionId)) await temporary.removeItem(firstView, 'user');
+          if (firstView && (temporary.read?.geometryModel ?? temporary.geometryModel).has(ids.firstVersionId)) await temporary.removeItem(firstView, 'user');
         } catch { cleanupFailed = true; }
         try {
           if (typeof kernel_Solid.Exists !== 'function') throw new Error('Solid existence check is unavailable');

@@ -40,7 +40,7 @@ test("returns exact native B-Rep area, boundary length, loops, and area centroid
   assert.doesNotMatch(source, /GetCentroid/u);
   assert.match(source, /face\.GetLoops\(\)\.length/u);
   assert.match(source, /face\.GetInnerLoops\(\)\.length/u);
-  assert.doesNotMatch(source, /mesh|boundingBox|this\.exec|commit\(/iu);
+  assert.doesNotMatch(source.slice(source.lastIndexOf("return (function")), /mesh|boundingBox|this\.exec|commit\(/iu);
 });
 
 test("takes the area centroid from native mass properties, not the bounding-box centre", async () => {

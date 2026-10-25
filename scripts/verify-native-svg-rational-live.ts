@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -122,11 +124,13 @@ async function main(): Promise<void> {
 
     const fixture = await readFile(fixturePath);
     const fixtureHash = createHash("sha256").update(fixture).digest("hex");
-    const imported = await call<AcceptanceState>(client, "plasticity_import_step", {
+    const importReport = await call<{ documentToken: string; revision: string }>(client, "plasticity_import_step", {
       path: fixturePath,
       intent: "Disposable rational conic SVG acceptance fixture",
       revision: initial.revision,
     });
+    const imported = await call<AcceptanceState>(client, "plasticity_status", {});
+    requireCondition(importReport.documentToken === imported.documentToken && importReport.revision === imported.revision, "STEP import readback changed document or revision");
     const added = imported.bodies.filter((body) => !initialState.bodies.some((before) => before.id === body.id));
     const addedWire = added[0];
     if (added.length !== 1 || !addedWire || addedWire.type !== "Wire") throw new Error("STEP fixture did not add exactly one native Wire");
@@ -191,7 +195,7 @@ async function call<T>(client: Client, name: string, args: Record<string, unknow
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text) as T;
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision })) as T;
 }
 function toolText(response: unknown): string {
   if (typeof response !== "object" || response === null || !("content" in response) || !Array.isArray(response.content)) throw new Error("MCP tool returned no content");

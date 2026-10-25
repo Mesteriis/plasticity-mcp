@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -97,7 +99,7 @@ async function main(): Promise<void> {
     evidence.sceneDiff = {
       changed: regionChanges.diff.changed,
       addedRegionIds: regionChanges.diff.regionsAdded.map((region: { id: string }) => region.id),
-      currentRegionCount: regionChanges.current.regions.length,
+      currentRegionCount: regionChanges.current.regionCount,
     };
     const directions = await call(live.client, "plasticity_list_curve_directions", {});
     const curve = requireRectangleCurve(directions, wire.id, center, normal);
@@ -186,7 +188,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 function toolText(response: unknown): string {

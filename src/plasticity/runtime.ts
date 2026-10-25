@@ -679,7 +679,7 @@ export class PlasticityRuntime {
         const info = instanceInfos[index];
         if (!empty || info?.tag !== 'Object') return null;
         const stable = nativeApi.db.lookupEmptyById(Number(empty.versionId));
-        if (stable?.constructor?.name !== 'Empties_ObjectEmpty') return null;
+        if (!nativeApi.isReferenceMesh(stable)) return null;
         const sourcePath = String(info.path ?? '');
         const lowerPath = sourcePath.toLowerCase();
         const sourceFormat = lowerPath.endsWith('.stl') ? 'stl' : lowerPath.endsWith('.obj') ? 'obj' : lowerPath.endsWith('.3mf') ? '3mf' : 'unknown';
@@ -769,7 +769,7 @@ export class PlasticityRuntime {
       for (const empty of instanceEmpties) {
         if (!empty) continue;
         const stable = nativeApi.db.lookupEmptyById(Number(empty.versionId));
-        if (stable?.constructor?.name !== 'Empties_ObjectEmpty') continue;
+        if (!nativeApi.isReferenceMesh(stable)) continue;
         referenceMeshIdByNodeKey.set(Number(nativeApi.db.nodes.item2key(stable)), Number(stable.versionId));
       }
       const groupSnapshot = nativeApi.db.groups.snapshot();

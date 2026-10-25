@@ -33,7 +33,7 @@ export const SELECT_NATIVE_ROOTS = `function (contracts) {
       if (Object.keys(object).length === expected.length) enums[name] = object;
     }
   }
-  if (kernels.length !== 1) throw new Error('Native kernel namespace is missing or ambiguous');
+  if (kernels.length !== 1) throw new Error('Native kernel namespace is missing or ambiguous (' + kernels.length + ' candidates)');
   return { kernel: kernels[0], enums };
 }`;
 
@@ -70,6 +70,9 @@ export const SELECT_STORE_BINDINGS = `function (editor, roots) {
     DeleteEdgeFactory: 'DissolveEdgeFactory',
     DeleteEdgeCommand: 'DeleteRedundantTopologyCommand',
   })) if (!bindings[legacy] && bindings[current]) bindings[legacy] = bindings[current];
+  // ConvertCommand became selection-only in 26.2. Geometry conversion must use
+  // a native geometry command so committing its factory records Undo history.
+  if (bindings.ConvertControlPointCommand) bindings.ConvertCommand = bindings.ConvertControlPointCommand;
   // These aliases were checked against the legacy module and live native models.
   bindings.kernel_Solid = roots.kernel.SolidBody;
   bindings.kernel_Sheet = roots.kernel.SheetBody;

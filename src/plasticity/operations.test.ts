@@ -3990,7 +3990,7 @@ test("splits one nonperiodic native Wire segment at a normalized parameter", asy
   assert.deepEqual(call?.values, [{ reference: { bodyId: 7, segmentEntityId: 99 }, normalizedParameter: 0.5 }]);
   assert.match(call?.source ?? "", /edge\.IsPeriodic\(\)/);
   assert.match(call?.source ?? "", /factory\._segment\.model = new Proxy/);
-  assert.match(call?.source ?? "", /target\.SplitAt\(args\.normalizedParameter\)/);
+  assert.match(call?.source ?? "", /nativeApi\.configureCurveSplit\(factory, segment, args\.normalizedParameter\)/);
   assert.doesNotMatch(call?.source ?? "", /Denormalize/);
 });
 

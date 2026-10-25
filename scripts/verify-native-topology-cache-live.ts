@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { discoverPlasticityTargets } from "../src/cdp/discovery.ts";
+import { nativeFunction } from "../src/plasticity/native-function.ts";
 import { acquireWindowOwnership } from "../src/plasticity/ownership.ts";
 import { PlasticityOperations } from "../src/plasticity/operations.ts";
 import { PlasticityRuntime, type RuntimeState } from "../src/plasticity/runtime.ts";
@@ -17,9 +18,9 @@ export async function verifyCachedTopology(runtime: PlasticityRuntime): Promise<
   const cached = await runtime.getState();
   const repeated = await runtime.getState();
   assert.deepEqual(repeated, cached, "repeated cached reads must agree");
-  const populated = await runtime.read<boolean>(`function () {
+  const populated = await runtime.read<boolean>(nativeFunction`function () {
     const cache = globalThis[Symbol.for('plasticity-mcp.body-topology')];
-    return Boolean(cache) && [...this.geo.geometryModel].every(([versionId, item]) =>
+    return Boolean(cache) && [...nativeApi.geo.geometryModel].every(([versionId, item]) =>
       cache.get(item.view)?.versionId === versionId);
   }`);
   assert.equal(populated, true, "every current body must have a topology cache entry");

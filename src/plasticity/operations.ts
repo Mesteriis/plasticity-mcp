@@ -255,6 +255,7 @@ export interface SurfaceStructureDescriptor {
   trimmed: boolean;
   faceParameterBounds: { uMin: number; uMax: number; vMin: number; vMax: number };
   naturalParameterBounds: { uMin: number; uMax: number; vMin: number; vMax: number } | null;
+  naturalParameterBoundsSource?: "surface" | "untrimmed-face" | null;
   bSpline: {
     uDegree: number;
     vDegree: number;
@@ -1240,10 +1241,10 @@ export class PlasticityOperations {
       const editor = this;
       const wanted = new Map(args.vertices.map(reference => [reference.bodyId + ':' + reference.vertexId, reference]));
       const matches = new Map();
-      for (const entry of this.snaps.cache.entries ?? []) {
+      for (const entry of nativeApi.pointSnapEntries()) {
         for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
           const snap = entry.lookup(index);
-          if (snap?.constructor?.name !== 'Snaps_ShellVertexSnap') continue;
+          if (!['Snaps_ShellVertexSnap', 'ShellVertexSnap'].includes(snap?.constructor?.name)) continue;
           const bodyId = nativeApi.db.lookupStableId(snap.item?.versionId);
           const vertexId = snap.model?.Id?.();
           const key = bodyId + ':' + vertexId;
@@ -1312,18 +1313,18 @@ export class PlasticityOperations {
         return { reference, entityId: entityId(reference, item) };
       });
       const snaps = wanted.map(({ reference, entityId }) => {
-        for (const entry of editor.snaps.cache.entries ?? []) {
+        for (const entry of nativeApi.pointSnapEntries()) {
           for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
             const candidate = entry.lookup(index);
             if (nativeApi.db.lookupStableId(candidate?.item?.versionId) !== reference.bodyId) continue;
             if (reference.type === 'vertex'
-              && candidate?.constructor?.name === 'Snaps_ShellVertexSnap'
+              && ['Snaps_ShellVertexSnap', 'ShellVertexSnap'].includes(candidate?.constructor?.name)
               && Number(candidate.model?.Id?.()) === entityId) return candidate;
             if (reference.type === 'edge-midpoint'
               && candidate?.constructor?.name === 'EdgePointSnap'
               && Number(candidate.model?.Id?.()) === entityId) return candidate;
             if (reference.type === 'face-center'
-              && candidate?.constructor?.name === 'Snaps_FaceCenterPointSnap'
+              && ['Snaps_FaceCenterPointSnap', 'FaceCenterPointSnap'].includes(candidate?.constructor?.name)
               && Number(candidate.faceSnap?.model?.Id?.()) === entityId) return candidate;
           }
         }
@@ -1399,18 +1400,7 @@ export class PlasticityOperations {
       }
       if (!modelEdge) throw new Error('Stale or unknown native edge: ' + args.edge.bodyId + ':' + entityId);
       if (!modelEdge.IsCircle()) throw new Error('Radius measurement requires a circular edge');
-      let snap;
-      for (const entry of this.snaps.cache.entries ?? []) {
-        for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
-          const candidate = entry.lookup(index);
-          if (!['EdgePointSnap', 'CurveSegmentMidpointSnap'].includes(candidate?.constructor?.name)) continue;
-          if (nativeApi.db.lookupStableId(candidate.item?.versionId) !== args.edge.bodyId) continue;
-          if (Number(candidate.model?.Id?.()) !== entityId) continue;
-          snap = candidate;
-          break;
-        }
-        if (snap) break;
-      }
+      const snap = nativeApi.findRadiusSnap(item, args.edge.bodyId, entityId);
       if (!snap) throw new Error('Plasticity circular-edge snap is unavailable for the requested radius measurement');
       let failure;
       const command = new this.commands.MeasureRadiusCommand(this);
@@ -1649,7 +1639,7 @@ export class PlasticityOperations {
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const find = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       ${commandStart("MoveItemCommand")}
@@ -1667,7 +1657,7 @@ export class PlasticityOperations {
     await this.runtime.mutate(nativeFunction`async function (Factory, Vector, Quaternion, args) {
       const find = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       ${commandStart("RotateItemCommand")}
@@ -1688,7 +1678,7 @@ export class PlasticityOperations {
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const find = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       ${commandStart("ScaleItemCommand")}
@@ -1706,7 +1696,7 @@ export class PlasticityOperations {
     await this.runtime.mutate(nativeFunction`async function (args) {
       const find = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
@@ -1731,7 +1721,7 @@ export class PlasticityOperations {
     requireReferenceMeshIds(state, [id]);
     await this.runtime.mutate(nativeFunction`async function (args) {
       const empty = nativeApi.db.lookupEmptyById(args.id);
-      if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + args.id);
+      if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + args.id);
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
       const editor = this;
@@ -1782,7 +1772,7 @@ export class PlasticityOperations {
       };
       const findReferenceMesh = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
@@ -1841,7 +1831,7 @@ export class PlasticityOperations {
       };
       const findReferenceMesh = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
@@ -1850,17 +1840,22 @@ export class PlasticityOperations {
         return group;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      this.selection.selected.removeAll();
-      for (const view of args.bodyIds.map(find)) this.selection.selected.add(view);
-      for (const empty of args.instanceIds.map(findEmpty)) nativeApi.selection.addEmpty(empty);
-      for (const empty of args.referenceMeshIds.map(findReferenceMesh)) nativeApi.selection.addEmpty(empty);
-      for (const group of args.groupIds.map(findGroup)) nativeApi.selection.addGroup(group);
+      const editor = this;
       let failure;
       const command = new Command(this, findGroup(args.destinationGroupId));
       command.remember = false;
       const execute = command.execute.bind(command);
       command.execute = async function () {
-        try { return await execute(); }
+        try {
+          editor.selection.selected.removeAll();
+          for (const view of args.bodyIds.map(find)) editor.selection.selected.add(view);
+          for (const empty of args.instanceIds.map(findEmpty)) nativeApi.selection.addEmpty(empty);
+          for (const empty of args.referenceMeshIds.map(findReferenceMesh)) nativeApi.selection.addEmpty(empty);
+          for (const group of args.groupIds.map(findGroup)) nativeApi.selection.addGroup(group);
+          const result = await execute();
+          nativeApi.completeGroupMove(args.referenceMeshIds.length);
+          return result;
+        }
         catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
@@ -1980,7 +1975,7 @@ export class PlasticityOperations {
       };
       const findReferenceMesh = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
@@ -2176,7 +2171,7 @@ export class PlasticityOperations {
           .map(empty => Number(empty.versionId))
           .filter(Number.isInteger),
         referenceMeshIds: Array.from(selection.empties ?? [])
-          .filter(empty => empty?.constructor?.name === 'Empties_ObjectEmpty')
+          .filter(empty => nativeApi.isReferenceMesh(empty))
           .map(empty => Number(empty.versionId))
           .filter(Number.isInteger),
         groupIds: Array.from(selection.groups ?? [])
@@ -2598,7 +2593,16 @@ export class PlasticityOperations {
         let info;
         try { info = surface.GetInfo(); } catch {}
         let naturalBounds;
-        try { naturalBounds = finiteBounds(surface.GetUVBox()); } catch { naturalBounds = null; }
+        let naturalParameterBoundsSource = null;
+        if (typeof surface.GetUVBox === 'function') {
+          try { naturalBounds = finiteBounds(surface.GetUVBox()); } catch { naturalBounds = null; }
+          if (naturalBounds) naturalParameterBoundsSource = 'surface';
+        } else if (face.IsUntrimmed()) {
+          // 26.2 removed GetUVBox. An untrimmed face covers the carrier's full
+          // native parameter domain; trimmed faces must still report unknown.
+          naturalBounds = { ...faceBounds };
+          naturalParameterBoundsSource = 'untrimmed-face';
+        } else naturalBounds = null;
         const bSpline = surface.constructor?.name === 'BSurf' &&
           ['uDegree', 'vDegree', 'uSpans', 'vSpans', 'uVertices', 'vVertices'].every(key => Number.isInteger(info?.[key]))
           ? {
@@ -2617,6 +2621,7 @@ export class PlasticityOperations {
           trimmed: !face.IsUntrimmed(),
           faceParameterBounds: faceBounds,
           naturalParameterBounds: naturalBounds,
+          naturalParameterBoundsSource,
           bSpline,
         });
       }
@@ -2795,7 +2800,7 @@ export class PlasticityOperations {
     await this.runtime.read(nativeFunction`function (args) {
       const find = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       this.selection.selected.removeAll();
@@ -2816,7 +2821,7 @@ export class PlasticityOperations {
       };
       const findReferenceMesh = id => {
         const empty = nativeApi.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
@@ -5509,18 +5514,7 @@ export class PlasticityOperations {
         try {
           const factory = new Factory(editor).resource(this);
           factory.segment = segment;
-          const model = factory._segment?.model;
-          if (!model) throw new Error('Plasticity 26.1.3 Insert Knot model bridge is unavailable');
-          // InsertKnotFactory's public segment setter does not populate its private UI parameter.
-          // Keep the native factory transaction, database replacement, and history behavior while
-          // supplying the explicit normalized MCP parameter to the same kernel Edge::InsertKnot call.
-          factory._segment.model = new Proxy(model, {
-            get(target, key) {
-              if (key === 'InsertKnot') return () => target.InsertKnot(nativeParameter);
-              const value = Reflect.get(target, key, target);
-              return typeof value === 'function' ? value.bind(target) : value;
-            },
-          });
+          nativeApi.configureCurveKnot(factory, nativeParameter);
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
@@ -5569,19 +5563,7 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          factory.segment = segment;
-          const model = factory._segment?.model;
-          if (!model) throw new Error('Plasticity 26.1.3 Split Segment model bridge is unavailable');
-          // SplitSegmentFactory receives the split parameter only from its private UI command.
-          // Preserve the native commit/database/history path and supply the explicit MCP value
-          // to the same normalized Edge::SplitAt call used by that factory.
-          factory._segment.model = new Proxy(model, {
-            get(target, key) {
-              if (key === 'SplitAt') return () => target.SplitAt(args.normalizedParameter);
-              const value = Reflect.get(target, key, target);
-              return typeof value === 'function' ? value.bind(target) : value;
-            },
-          });
+          nativeApi.configureCurveSplit(factory, segment, args.normalizedParameter);
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
@@ -7233,8 +7215,7 @@ export class PlasticityOperations {
             }
             return Array.from({ length: view.high.faces.length }, (_, index) => view.high.faces.get(index));
           });
-          factory.sourceFace = findFace(args.sourceFace);
-          factory.targetFace = findFace(args.targetFace);
+          nativeApi.setDeformationFaces(factory, findFace(args.sourceFace), findFace(args.targetFace));
           factory.keepTools = true;
           factory.scaleU = args.options.scaleU;
           factory.scaleV = args.options.scaleV;
@@ -7316,8 +7297,7 @@ export class PlasticityOperations {
             if (view.constructor.name !== 'Wire') throw new Error('Curve deformation inputs must remain Wire bodies');
             return view;
           });
-          factory.sourceFace = findFace(args.sourceFace);
-          factory.targetFace = findFace(args.targetFace);
+          nativeApi.setDeformationFaces(factory, findFace(args.sourceFace), findFace(args.targetFace));
           factory.keepTools = true;
           factory.scaleU = args.options.scaleU;
           factory.scaleV = args.options.scaleV;
@@ -8142,10 +8122,10 @@ export class PlasticityOperations {
     await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       const wanted = new Set(args.vertices.map(reference => reference.bodyId + ':' + reference.vertexId));
       const selectedByKey = new Map();
-      for (const entry of this.snaps.cache.entries ?? []) {
+      for (const entry of nativeApi.pointSnapEntries()) {
         for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
           const snap = entry.lookup(index);
-          if (snap?.constructor?.name !== 'Snaps_ShellVertexSnap') continue;
+          if (!['Snaps_ShellVertexSnap', 'ShellVertexSnap'].includes(snap?.constructor?.name)) continue;
           const bodyId = nativeApi.db.lookupStableId(snap.item?.versionId);
           const vertexId = snap.model?.Id?.();
           const key = bodyId + ':' + vertexId;
@@ -9481,7 +9461,7 @@ export class PlasticityOperations {
     const metadata = await stat(input);
     if (!metadata.isFile()) throw new Error("Reference mesh input must be a regular file");
     if (metadata.size === 0) throw new Error("Reference mesh input must not be empty");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
       let failure;
@@ -9494,7 +9474,7 @@ export class PlasticityOperations {
           factory.unit = args.sourceUnit;
           const result = await factory.commit();
           const created = Array.isArray(result) ? result : [result].filter(Boolean);
-          if (created.length === 0 || !created.every(item => item?.constructor?.name === 'Empties_ObjectEmpty')) {
+          if (created.length === 0 || !created.every(item => nativeApi.isReferenceMesh(item))) {
             throw new Error('Plasticity did not create reference mesh objects for the complete import');
           }
           return result;
