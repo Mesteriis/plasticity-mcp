@@ -1,3 +1,4 @@
+import { nativeFunction } from "./native-function.ts";
 import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
 
 type Vector3 = [number, number, number];
@@ -83,13 +84,13 @@ async function collectNativeIntersections(
   pairs: BodyInterferencePair[],
   temporaryIds: TemporaryIds[],
 ): Promise<NativeInterferencePairResult[]> {
-  return await runtime.readNative<NativeInterferencePairResult[]>(`async function (BooleanFactory, kernel_Solid, args) {
+  return await runtime.readNative<NativeInterferencePairResult[]>(nativeFunction`async function (BooleanFactory, kernel_Solid, args) {
     const mm = value => value * 1000;
     const point = value => [mm(value.x), mm(value.y), mm(value.z)];
     const findModel = id => {
       const matches = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
-        if (this.db.lookupStableId(versionId) === id) matches.push(item);
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (nativeApi.db.lookupStableId(versionId) === id) matches.push(item);
       }
       if (matches.length !== 1 || matches[0].view?.constructor?.name !== 'Solid') {
         throw new Error('Requested current Solid is unavailable');
@@ -97,8 +98,8 @@ async function collectNativeIntersections(
       return matches[0].model;
     };
     const inspectPair = async (pair, ids) => {
-      const temporary = this.geo.makeTemporary();
-      Object.defineProperty(temporary, 'primaryPartition', { value: this.geo.primaryPartition });
+      const temporary = nativeApi.geo.makeTemporary();
+      Object.defineProperty(temporary, 'primaryPartition', { value: nativeApi.geo.primaryPartition });
       const temporaryDatabase = Object.create(this.db);
       Object.defineProperty(temporaryDatabase, 'geo', { value: temporary });
       const temporaryEditor = Object.create(this);

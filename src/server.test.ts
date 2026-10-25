@@ -5275,7 +5275,7 @@ test("serializes compact curve inspection and all native rebuild modes", async (
   const controlPoints = [{
     id: 7, versionId: 17, positionSource: "native-control-handle" as const,
     boundaryVertices: [{ reference: { bodyId: 7, kind: "vertex" as const, pointId: 101 }, versionId: "17v101", positionMm: [0, 0, 0] as [number, number, number], slideDirections: { positiveU: [1, 0, 0] as [number, number, number], negativeU: [-1, 0, 0] as [number, number, number] } }],
-    interiorControlPoints: [{ reference: { bodyId: 7, kind: "control-point" as const, pointId: 2 }, versionId: "17c2", positionMm: [10, 20, 0] as [number, number, number], slideDirections: { positiveU: [0, 1, 0] as [number, number, number], negativeU: [0, -1, 0] as [number, number, number] } }],
+    interiorControlPoints: [{ reference: { bodyId: 7, kind: "control-point" as const, pointId: 0 }, versionId: "17c0", positionMm: [10, 20, 0] as [number, number, number], slideDirections: { positiveU: [0, 1, 0] as [number, number, number], negativeU: [0, -1, 0] as [number, number, number] } }],
   }];
   const evaluatedSamples = [{
     reference: { bodyId: 7, segmentEntityId: 99, normalizedParameter: 0.5 }, bodyVersionId: 17,
@@ -5339,35 +5339,41 @@ test("serializes compact curve inspection and all native rebuild modes", async (
   const duplicateRegions = await client.callTool({ name: "plasticity_create_curves_from_regions", arguments: { regionIds: ["20r1", "20r1"], revision: state.revision } });
   assert.equal(duplicateRegions.isError, true);
   const movedControlPoint = await client.callTool({ name: "plasticity_move_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], deltaMm: [0, 10, 5], revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], deltaMm: [0, 10, 5], revision: state.revision,
   } });
   assert.equal(movedControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiMoveControlPointFactory", "MoveControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], delta: [0, 0.01, 0.005] }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], delta: [0, 0.01, 0.005] }]);
   const slidControlPoint = await client.callTool({ name: "plasticity_slide_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], direction: "positive-u", distanceMm: 5, revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], direction: "positive-u", distanceMm: 5, revision: state.revision,
   } });
   assert.equal(slidControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiSlideControlPointFactory", "MoveControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], direction: "posU", distance: 0.005 }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], direction: "posU", distance: 0.005 }]);
   const rotatedControlPoint = await client.callTool({ name: "plasticity_rotate_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivotMm: [10, 20, 0], axis: [0, 0, 2], degrees: 90, revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivotMm: [10, 20, 0], axis: [0, 0, 2], degrees: 90, revision: state.revision,
   } });
   assert.equal(rotatedControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiRotateControlPointFactory", "RotateControlPointCommand", "Vector3", "Quaternion"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivot: [0.01, 0.02, 0], axis: [0, 0, 1], radians: Math.PI / 2 }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivot: [0.01, 0.02, 0], axis: [0, 0, 1], radians: Math.PI / 2 }]);
   const scaledControlPoint = await client.callTool({ name: "plasticity_scale_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivotMm: [10, 20, 0], factors: [2, 0.5, 1], revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivotMm: [10, 20, 0], factors: [2, 0.5, 1], revision: state.revision,
   } });
   assert.equal(scaledControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiScaleControlPointFactory", "ScaleControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivot: [0.01, 0.02, 0], factors: [2, 0.5, 1] }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivot: [0.01, 0.02, 0], factors: [2, 0.5, 1] }]);
+  const beforeInvalidPoint = nativeCalls.length;
+  const invalidPoint = await client.callTool({ name: "plasticity_move_curve_control_points", arguments: {
+    points: [{ bodyId: 7, kind: "control-point", pointId: -1 }], deltaMm: [0, 1, 0], revision: state.revision,
+  } });
+  assert.equal(invalidPoint.isError, true);
+  assert.equal(nativeCalls.length, beforeInvalidPoint);
   const deletedControlPoint = await client.callTool({ name: "plasticity_delete_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], revision: state.revision,
   } });
   assert.equal(deletedControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["DeleteControlPointFactory", "DeleteControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }] }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }] }]);
 
   for (const arguments_ of [
     { ids: [7], method: "tolerance", toleranceMm: 0.1, revision: state.revision },

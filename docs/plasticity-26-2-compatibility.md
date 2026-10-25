@@ -1,0 +1,103 @@
+# Plasticity 26.2.1 experimental adapter
+
+Validated on macOS Apple Silicon on 2026-10-25, alongside a separate copy of
+26.1.3. The installed application was not changed. This is adapter compatibility
+for a prepared experimental copy, not support for launching the unmodified
+26.2.1 distribution.
+
+## Startup and security prerequisites
+
+The official 26.2.1 Electron Framework disables
+`EnableNodeCliInspectArguments`. The launcher still fails its read-only fuse
+preflight for that bundle. Neither the server nor either launcher changes fuses,
+entitlements, signatures, system security settings, or the installed application.
+
+The separately authorized local experiment enabled only that inspector fuse in
+a disposable copy, ad-hoc signed the modified framework and containing bundle,
+and supplied `com.apple.security.cs.disable-library-validation` to that copy and
+its helper bundles where needed. Vendor native modules and helpers already
+carrying that entitlement were preserved. Changing the copy's signature and
+library-validation protection is a separate security decision; those changes
+are not performed or enabled by an MCP option.
+
+For an already prepared copy:
+
+```sh
+npm run start:plasticity-isolated -- --application /absolute/Experimental/Plasticity.app
+```
+
+This allocates a fresh temporary profile and distinct loopback inspector/CDP
+ports. Set `PLASTICITY_CDP_URL` to the returned renderer endpoint when starting
+MCP. Call `plasticity_list_windows` and explicitly select that copy's window.
+The default application and 26.1.3 startup remain available.
+
+Electron 42 can begin with an empty main script, without the old entry pause.
+The launcher now uses `beforeScriptExecution` instrumentation to find a usable
+module before `app.isReady()`. It removes that breakpoint and resumes the app
+on both success and rejection. Remote debugging remains bound to loopback.
+
+## Adapter changes
+
+- 26.1.3 retains discovery from command-log closures. When the renderer exposes
+  no `[[Scopes]]`, the new route queries live functions and objects, requires a
+  unique native Editor and kernel namespace, and retains only resolved bindings.
+  Ambiguous constructors are omitted, rather than selected arbitrarily.
+- Four UI enums are identified by complete verified scalar contracts. Kernel
+  exports come from the actual live namespace; Three.js types come from the
+  editor's viewport camera, with a checked Vector2 prototype.
+- A call-local API view maps `geo.read.geometryModel`, editor stores, native
+  geometry lookups, and generic selection to the legacy access contract.
+  Factories and commands receive the real Editor. Its database, geometry,
+  prototypes and selection objects are not patched.
+- Explicit aliases cover unified primitive, cut, realization, control-point,
+  bridge and edge-dissolve factories. Changed control-point selection, slide
+  directions and bridge endpoints are adapted separately. Open Wire vertices
+  resolve to a unique adjacent native segment, preserving its endpoint parameter.
+- Control-point ID zero is accepted by MCP, as returned by 26.2.1. Negative,
+  duplicate, unknown and stale references remain rejected.
+
+## Live coverage
+
+The same checkout and production adapter were used against both disposable
+application copies. Every listed final run passed; fixtures were undone or the
+saved baseline was reopened.
+
+| Scenario | 26.1.3 copy | Experimental 26.2.1 copy | Entry point |
+| --- | --- | --- | --- |
+| Fresh isolated startup, renderer discovery | Passed | Passed | `ensurePlasticityCdp` |
+| Box, sphere, cylinder, exact volumes, native Check | Passed | Passed | Production operations |
+| Move, Undo/Redo, STEP, groups, native save/open | Passed | Passed | Production operations |
+| Curve selection, slide, move, rotate, scale, delete, exact B-Rep, Undo/Redo | Passed | Passed | `accept:native-curve-control-points`, stdio MCP |
+| G0–G3 curve bridge, vertex bridge, shell-edge bridge | Passed | Passed | `accept:native-curve-bridge`, stdio MCP |
+| Linked instances, transforms, realization, independent Solid/Sheet duplication | Passed | Passed | `accept:instances`, stdio MCP |
+| Group hierarchy, activation, placement, selection, visibility, locks, viewport checks | Passed | Passed | `accept:groups`, stdio MCP |
+| Move, extend, offset, dissolve edges, exact topology, Undo/Redo | Passed | Passed | `accept:native-edge-edits`, stdio MCP |
+| Hidden bodies/groups after native reopen, viewport pixel comparison, locks and Undo/Redo | Passed | Passed | `accept:visibility-after-load` |
+| Face cut: two valid 500 mm³ solids; G2 surface bridge: valid Sheet, 3 faces/10 edges | Passed | Passed | `accept:native-store-factories` |
+
+The sphere additionally passed its standalone stdio acceptance on 26.2.1.
+Discovery resolved all 212 literal native bindings requested by the adapter.
+That binding count does not establish live acceptance for the entire tool
+catalog. Existing historical 26.1.3 acceptance entries retain their version and
+scope; unrelated CAD tools, all import/export formats, Workbench integrations,
+slicers and physical manufacturing were not reaccepted on 26.2.1.
+
+Run a suite against an explicitly selected **empty disposable document**, with
+a new output directory:
+
+```sh
+PLASTICITY_CDP_URL=http://127.0.0.1:PORT npm run accept:native-store-factories -- \
+  --target WINDOW_ID --allow-disposable-mutations --output /absolute/new-evidence
+```
+
+The acceptance scripts for groups, instances, curve bridges and edge edits now
+fetch revision-matched `plasticity_body_info` when mutation results contain
+compact summaries. The helper leaves validation/measurement responses intact
+and rejects document, revision or body-ID mismatches.
+
+## Automated checks
+
+On this change, `npm test` passed 1390 tests, and `npm run typecheck` passed.
+Workbench passed 90 tests, its typecheck, and its production build. The build
+retains its advisory warning about chunks larger than 500 kB. These checks do
+not run Plasticity or replace the live evidence above.

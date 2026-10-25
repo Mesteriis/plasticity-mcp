@@ -1448,7 +1448,7 @@ test("lists and removes current native measurements through Plasticity history",
   assert.deepEqual(call?.bindings, ["RemoveMeasurementCommand"]);
   assert.deepEqual(call?.values, [{ id: 3 }]);
   assert.match(call?.source ?? "", /lookupByStableId\(args\.id\)/);
-  assert.match(call?.source ?? "", /selected\.addMeasurement\(measurement\)/);
+  assert.match(call?.source ?? "", /nativeApi\.selection\.addMeasurement\(measurement\)/);
   assert.match(call?.source ?? "", /command\.execute\.bind\(command\)/);
   assert.match(call?.source ?? "", /viewport\.setNeedsRender\(\)/);
 });
@@ -1707,7 +1707,7 @@ test("creates and transforms native instances through their empty transforms", a
   assert.match(calls[0]?.source ?? "", /move\.empties = created/);
   assert.deepEqual(calls[1]?.bindings, ["MoveItemAndEmptyFactory"]);
   assert.deepEqual(calls[1]?.values, [{ ids: [0], delta: [0.005, 0, 0] }]);
-  assert.match(calls[1]?.source ?? "", /const store = this\.db\.empties\.write/);
+  assert.match(calls[1]?.source ?? "", /const store = nativeApi\.db\.empties\.write/);
   assert.match(calls[1]?.source ?? "", /const copy = original\.clone\(false\)/);
   assert.match(calls[1]?.source ?? "", /store\.id2empty\.set\(id, copy\)/);
   assert.match(calls[1]?.source ?? "", /factory\.empties = args\.ids\.map\(find\)/);
@@ -1770,7 +1770,7 @@ test("realizes and deletes current native instances while rejecting stale identi
   assert.deepEqual(calls[0]?.bindings, ["RealizeInstanceFactory"]);
   assert.match(calls[0]?.source ?? "", /factory\.empties = args\.ids\.map\(find\)/);
   assert.deepEqual(calls[1]?.bindings, []);
-  assert.match(calls[1]?.source ?? "", /selection\.selected\.addEmpty\(empty\)/);
+  assert.match(calls[1]?.source ?? "", /nativeApi\.selection\.addEmpty\(empty\)/);
   assert.match(calls[1]?.source ?? "", /new this\.commands\.DeleteCommand/);
 
   const mutationCount = calls.length;
@@ -1825,7 +1825,7 @@ test("manages native groups, hierarchy, visibility, and locks through document h
   assert.deepEqual(calls[0]?.bindings, []);
   assert.deepEqual(calls[0]?.values, [{ bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], name: "Bracket assembly" }]);
   assert.match(calls[0]?.source ?? "", /findReferenceMesh/u);
-  assert.match(calls[0]?.source ?? "", /selected\.addGroup\(group\)/);
+  assert.match(calls[0]?.source ?? "", /nativeApi\.selection\.addGroup\(group\)/);
   assert.match(calls[0]?.source ?? "", /command\.execute = async function/);
   assert.match(calls[0]?.source ?? "", /db\.nodes\.setName/);
   assert.deepEqual(calls[1]?.bindings, ["MoveSelectionToGroupCommand"]);
@@ -1838,14 +1838,14 @@ test("manages native groups, hierarchy, visibility, and locks through document h
   assert.match(calls[3]?.source ?? "", /new Command\(this, group\)/);
   assert.deepEqual(calls[4]?.values, [{ id: 0 }]);
   assert.deepEqual(calls[5]?.bindings, ["DissolveGroupCommand"]);
-  assert.match(calls[5]?.source ?? "", /selected\.addGroup\(group\)/);
+  assert.match(calls[5]?.source ?? "", /nativeApi\.selection\.addGroup\(group\)/);
   assert.deepEqual(calls[6]?.values, [{ flag: "visibility", bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], value: false }]);
   assert.match(calls[6]?.source ?? "", /selection\.selected\.removeAll\(\)/);
-  assert.match(calls[6]?.source ?? "", /editor\.db\.makeTransaction\(\)[\s\S]*transaction\.makeVisible\(item\)[\s\S]*transaction\.makeInvisible\(item\)[\s\S]*await editor\.db\.commit\(transaction\)/);
+  assert.match(calls[6]?.source ?? "", /nativeApi\.db\.makeTransaction\(\)[\s\S]*transaction\.makeVisible\(item\)[\s\S]*transaction\.makeInvisible\(item\)[\s\S]*await nativeApi\.db\.commit\(transaction\)/);
   assert.doesNotMatch(calls[6]?.source ?? "", /db\.nodes\.setVisible/);
   assert.deepEqual(calls[7]?.values, [{ flag: "locked", bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], value: true }]);
   assert.match(calls[7]?.source ?? "", /selection\.selected\.removeAll\(\)/);
-  assert.match(calls[7]?.source ?? "", /transaction\.lock\(item\)[\s\S]*transaction\.unlock\(item\)[\s\S]*await editor\.db\.commit\(transaction\)/);
+  assert.match(calls[7]?.source ?? "", /transaction\.lock\(item\)[\s\S]*transaction\.unlock\(item\)[\s\S]*await nativeApi\.db\.commit\(transaction\)/);
   assert.doesNotMatch(calls[7]?.source ?? "", /db\.nodes\.setLocked/);
 });
 
@@ -1909,17 +1909,17 @@ test("reads and replaces mixed native body, instance, and group selections", asy
 
   assert.deepEqual(result, { documentToken: state.documentToken, revision: state.revision, ...selected });
   assert.deepEqual(reads[0]?.values, [{ bodyIds: [7], instanceIds: [0], referenceMeshIds: [], groupIds: [1] }]);
-  assert.match(reads[0]?.source ?? "", /selected\.addEmpty\(empty\)/);
-  assert.match(reads[0]?.source ?? "", /selected\.addGroup\(group\)/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addEmpty\(empty\)/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addGroup\(group\)/);
   assert.match(reads[1]?.source ?? "", /selection\.empties/);
   assert.match(reads[1]?.source ?? "", /selection\.groups/);
 
   await operations.selectFaces([{ bodyId: 7, faceId: "17f1" }], state.revision);
   await operations.selectEdges([{ bodyId: 7, edgeId: "17e1" }], state.revision);
   assert.deepEqual(reads[2]?.values, [{ references: [{ bodyId: 7, faceId: "17f1" }] }]);
-  assert.match(reads[2]?.source ?? "", /selected\.addFace/);
+  assert.match(reads[2]?.source ?? "", /nativeApi\.selection\.addFace/);
   assert.deepEqual(reads[4]?.values, [{ references: [{ bodyId: 7, edgeId: "17e1" }] }]);
-  assert.match(reads[4]?.source ?? "", /selected\.addEdge/);
+  assert.match(reads[4]?.source ?? "", /nativeApi\.selection\.addEdge/);
 
   const readCount = reads.length;
   await assert.rejects(operations.selectNodes([], [], [], [], state.revision), /at least one body, instance, reference mesh, or group/i);
@@ -1951,7 +1951,7 @@ test("selects whole native Wire curves by current revision-bound body ID", async
 
   assert.deepEqual(result, { documentToken: state.documentToken, revision: state.revision, ...selected });
   assert.deepEqual(reads[0]?.values, [{ ids: [7] }]);
-  assert.match(reads[0]?.source ?? "", /selected\.addCurve\(find\(id\)\)/u);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addCurve\(find\(id\)\)/u);
   assert.match(reads[1]?.source ?? "", /selection\.curveIds/u);
 
   const readCount = reads.length;
@@ -1983,8 +1983,8 @@ test("reads and replaces revision-bound native curve control-point selections", 
 
   assert.deepEqual(await operations.selectCurveControlPoints(points, state.revision), { documentToken: state.documentToken, revision: state.revision, ...selected });
   assert.deepEqual(reads[0]?.values, [{ points }]);
-  assert.match(reads[0]?.source ?? "", /selected\.addVertex/);
-  assert.match(reads[0]?.source ?? "", /selected\.addCurveCV/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addVertex/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addCurveCV/);
   assert.match(reads[1]?.source ?? "", /selection\.curveVertices/);
   assert.match(reads[1]?.source ?? "", /selection\.curveCVs/);
 });
@@ -2611,7 +2611,7 @@ test("sets an exact native radius dimension on one cylindrical face", async () =
 
   assert.deepEqual(call?.bindings, ["DimensionRadiusCommand", "DimensionRadiusFactory"]);
   assert.deepEqual(call?.values, [{ face: { bodyId: 7, faceId: "17f2" }, radius: 0.007 }]);
-  assert.match(call?.source ?? "", /selected\.addFace/);
+  assert.match(call?.source ?? "", /nativeApi\.selection\.addFace/);
   assert.match(call?.source ?? "", /collection\?\.HasRadius/);
   assert.match(call?.source ?? "", /factory\.radius = args\.radius/);
 });
@@ -2764,7 +2764,7 @@ test("lists and assigns native Plasticity appearance materials", async () => {
   assert.deepEqual(call?.bindings, []);
   assert.deepEqual(call?.values, [{ ids: [7], material: { materialId: 2 } }]);
   assert.match(call?.source ?? "", /selection\.selected\.removeAll\(\)/);
-  assert.match(call?.source ?? "", /editor\.db\.nodes\.setMaterial\(editor\.db\.nodes\.item2key\(view\), materialId\)/);
+  assert.match(call?.source ?? "", /nativeApi\.db\.nodes\.setMaterial\(nativeApi\.db\.nodes\.item2key\(view\), materialId\)/);
 });
 
 test("creates bounded appearance materials through native document history", async () => {
@@ -2778,8 +2778,8 @@ test("creates bounded appearance materials through native document history", asy
   await operations.setAppearanceMaterial([7], material, state.revision);
 
   assert.deepEqual(call?.values, [{ ids: [7], material }]);
-  assert.match(call?.source ?? "", /editor\.db\.materials\.default\.clone\(\)/);
-  assert.match(call?.source ?? "", /editor\.db\.materials\.add\(args\.material\.name, appearance\)/);
+  assert.match(call?.source ?? "", /nativeApi\.db\.materials\.default\.clone\(\)/);
+  assert.match(call?.source ?? "", /nativeApi\.db\.materials\.add\(args\.material\.name, appearance\)/);
   assert.match(call?.source ?? "", /new this\.commands\.GroupSelectedCommand\(this\)/);
 });
 
@@ -3586,7 +3586,7 @@ test("lists native Wire boundary vertices and interior control points without mu
   assert.deepEqual(readCall?.values, [{ ids: [7] }]);
   assert.match(readCall?.source ?? "", /item\.view\.vertices/);
   assert.match(readCall?.source ?? "", /item\.view\.cvs/);
-  assert.match(readCall?.source ?? "", /factory\.orientation\.posU/);
+  assert.match(readCall?.source ?? "", /nativeApi\.slideDirections\(factory\)/);
   assert.match(readCall?.source ?? "", /native-control-handle/);
 });
 
@@ -4104,7 +4104,7 @@ test("slides native curve control points along their local positive or negative 
     [{ points, direction: "posU", distance: 0.005 }],
     [{ points, direction: "negU", distance: 0.0025 }],
   ]);
-  assert.match(mutations[0]?.source ?? "", /factory\.direction = args\.direction/);
+  assert.match(mutations[0]?.source ?? "", /factory\.direction = nativeApi\.slideDirection\(args\.direction\)/);
   assert.match(mutations[0]?.source ?? "", /factory\.distance = args\.distance/);
 });
 
@@ -6402,10 +6402,10 @@ test("bridges exact Solid or Sheet edge endpoints with native continuity", async
 
   assert.deepEqual(call?.bindings, ["BridgeEdgeFactory", "BridgeEdgeCommand", "ContinuityType"]);
   assert.deepEqual(call?.values, [{ first, second, firstPosition: [0, 0, 0.01], secondPosition: [0.02, 0.01, 0.02], startContinuity: "G1", endContinuity: "G3" }]);
-  assert.match(call?.source ?? "", /factory\.edge1 = edge\(args\.first\)/);
+  assert.match(call?.source ?? "", /nativeApi\.initializeBridge\(factory, edge\(args\.first\), edge\(args\.second\), 'edge'\)/);
   assert.match(call?.source ?? "", /factory\.pickClosestVertices\(\)/);
   assert.match(call?.source ?? "", /matches\(factory\.startPosition, args\.firstPosition\)/);
-  assert.match(call?.source ?? "", /factory\.side1 = !factory\.side1/);
+  assert.match(call?.source ?? "", /nativeApi\.flipBridgeEnd\(factory, 1\)/);
   assert.match(call?.source ?? "", /factory\.startCurvature = Continuity\[args\.startContinuity\]/);
   assert.match(call?.source ?? "", /factory\.lockDistances = true/);
   assert.match(call?.source ?? "", /selection\.selected\.removeAll\(\)/);
@@ -6465,7 +6465,7 @@ test("bridges exact open Wire vertices with native continuity", async () => {
 
   assert.deepEqual(call?.bindings, ["BridgeVertexFactory", "BridgeVertexCommand", "ContinuityType"]);
   assert.deepEqual(call?.values, [{ first, second, firstPosition: [0.01, 0, 0], secondPosition: [0.02, 0.01, 0], startContinuity: "G1", endContinuity: "G3" }]);
-  assert.match(call?.source ?? "", /factory\.vertex1 = vertex\(args\.first\)/);
+  assert.match(call?.source ?? "", /nativeApi\.initializeBridge\(factory, vertex\(args\.first\), vertex\(args\.second\), 'vertex'\)/);
   assert.match(call?.source ?? "", /matches\(factory\.startPosition, args\.firstPosition\)/);
   assert.match(call?.source ?? "", /factory\.startCurvature = Continuity\[args\.startContinuity\]/);
   assert.match(call?.source ?? "", /factory\.lockDistances = true/);

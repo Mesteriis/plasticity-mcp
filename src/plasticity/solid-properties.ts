@@ -1,3 +1,4 @@
+import { nativeFunction } from "./native-function.ts";
 import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
 
 type Vector3 = [number, number, number];
@@ -88,14 +89,14 @@ export async function measureSolidProperties(
 }
 
 async function collectNativeProperties(runtime: PlasticityRuntime, ids: number[]): Promise<NativeSolidProperties[]> {
-  return await runtime.readNative<NativeSolidProperties[]>(`function (pk_default, args) {
+  return await runtime.readNative<NativeSolidProperties[]>(nativeFunction`function (pk_default, args) {
     // The body collection's own centroid is the centre of its bounding box;
     // the kernel's Eval.MassProperties answers the centre of volume.
     const evaluator = new pk_default.a.Eval(pk_default.a.Context.Get());
     const find = id => {
       const matches = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
-        if (this.db.lookupStableId(versionId) === id) matches.push({ versionId, item });
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (nativeApi.db.lookupStableId(versionId) === id) matches.push({ versionId, item });
       }
       if (matches.length !== 1 || matches[0].item?.view?.constructor?.name !== 'Solid') {
         throw new Error('Requested current Solid is unavailable: ' + id);
@@ -104,7 +105,7 @@ async function collectNativeProperties(runtime: PlasticityRuntime, ids: number[]
     };
     return args.ids.map(id => {
       const { versionId, item } = find(id);
-      const collection = this.db.lookupBodyCollection([versionId]);
+      const collection = nativeApi.db.lookupBodyCollection([versionId]);
       if (collection.Size() !== 1) throw new Error('Expected exactly one native Solid collection member: ' + id);
       const properties = collection.EvaluateMassProperties();
       const amounts = Array.from(properties?.amounts ?? [], Number);
