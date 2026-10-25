@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #19
-(`a553ff1f9f05f87145cf1b0b4eeafe56b5925429`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #20
+(`013d22ab77a0d2477532b7267cb55977eb67452a`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 123 | 131 |
+| Completed passing fixtures | 130 | 138 |
 | Failing or blocked fixtures | 7 | 7 |
-| Tools with success in an application-connected passing fixture | 229 | 271 |
+| Tools with success in an application-connected passing fixture | 237 | 279 |
 | Tools attempted only in unaccepted fixtures | 10 | 10 |
-| Tools without a recorded application-connected live call | 132 | 90 |
+| Tools without a recorded application-connected live call | 124 | 82 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -513,3 +513,69 @@ Integration validation for the PR #20 continuation: `npm test` passed 1447 tests
 `npm run typecheck` passed, Workbench passed 90 tests, its typecheck and production
 build. The build retains its advisory warning about chunks larger than 500 kB.
 Final read-only reconciliation found both experimental documents empty and idle.
+
+## Appearance, annotation and native lifecycle continuation
+
+After the corrections below, all **7/7 scenarios passed on each experimental
+version**. Earlier material and authored bridge failures are superseded only
+by completed passing reruns of the same scenarios. Both documents finished empty
+and idle. The eight newly accepted tools increase cumulative coverage to
+279/371 on 26.2.1 and 237/371 on 26.1.3; existing seven failing/blocked fixtures
+per version remain unaccepted.
+
+`npm run accept:native-lifecycle -- --target ID --allow-disposable-mutations
+--case CASE --output NEW_DIRECTORY` runs one guarded scenario with isolated
+persistent stores:
+
+| Case | Native operation history | Assertions |
+| --- | ---: | --- |
+| `appearance` | 3 steps | Create/assign #336699, roughness 0.25, metalness 0.4, opacity 0.8; reuse on a second Solid and clear the first assignment; geometry unchanged |
+| `section-oblique` | 0 steps | Origin [5, 10, 15] mm, normalized clipped-half-space normal [1/√2, 0, 1/√2], stable ID, registered viewport, repeated-create rejection, explicit deletion |
+| `delete-distance` | 2 steps | Create and delete opposite-vertex annotation √1400 mm; Undo/Redo restores its stable ID, body and topology references |
+| `delete-radius` | 2 steps | Create and delete native cylinder-edge radius annotation R3/Ø6; Undo/Redo restores its stable ID and edge reference |
+| `split-parallel` | 8 steps | 10 × 20 × 30 mm source, cuts X=3/7 mm, volumes 1800/2400/1800 mm³; unrelated 24 mm³ Solid unchanged |
+| `split-grid` | 12 steps | Cuts X=5 and Y=10 mm require three binary cuts, four 1500 mm³ parts; unrelated Solid unchanged |
+| `surface-bridge` | 1 step | Public stdio G2 Surface Bridge joins two Sheet faces into one native-valid Sheet with three faces, ten edges, two planar walls and one B-Surface |
+
+Appearance and section checks validate native state read-back, revision/history
+behavior and B-Rep preservation. They **do not validate rendered pixels** or
+replace the existing screenshot/manual fixtures. The section is explicitly
+removed, rather than undone. Creating a second section, deleting an absent
+section/measurement, and selecting an unknown material must reject without
+changing revision or history.
+
+Split outputs must pass native Solid validation, exact per-part bounds and
+0.0001 mm³ volume checks. Source/part coordinates use 0.00001 mm tolerance.
+Every history-bearing case checks the source snapshot after full Undo, stable
+output IDs and geometry after Redo, then restoration of the initial empty
+snapshot. Surface Bridge deliberately trims its source walls (`trimWalls=true`):
+their centroids can move, so the fixture checks their original support planes,
+not unchanged face centers. The initial authored centroid assertion failed and
+was corrected against that verified command contract.
+
+### Appearance adapter corrections
+
+The 26.2 material list contains material-info objects with `id`, whereas the
+legacy reader expected `[id, info]` pairs. After adding a material, state reads
+failed before the command result could be confirmed. The reader now normalizes
+both layouts, preserves the public material fields and revision fingerprint,
+and rejects malformed entries instead of silently dropping them. Tests execute
+the generated state-reader function for both layouts and verify revision change
+on a native appearance edit.
+
+Public `materialId: 0` now maps to the native unset value `undefined` when
+calling node-state `setMaterial`; on 26.2, passing literal zero caused
+`invalid material id`. Existing-material assignment and clearing remain within one owned native
+command each. Regression tests execute both legacy and modern API views, verify
+only the requested body is changed, and require native failures to propagate.
+The first failed live run was stopped; read-only reconciliation confirmed the
+completed assignment and idle executor, an owned backup was saved, and three
+confirmed Undo steps restored the empty fixture before rerunning.
+
+The strict STEP, circular-imprint and cable-channel bounds failures retain their
+previous tolerances and unaccepted status. No application bundle, signature,
+fuse, entitlement or system security setting was changed.
+
+Integration validation for the PR #21 continuation: `npm test` passed 1454 tests,
+`npm run typecheck` passed, Workbench passed 90 tests, its typecheck and production
+build. The build retains the advisory warning about chunks larger than 500 kB.

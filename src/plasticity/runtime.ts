@@ -570,7 +570,14 @@ export class PlasticityRuntime {
           ...topology,
         };
       }).filter(item => Number.isInteger(item.id));
-      const materials = this.materials.list().map(([id, info]) => {
+      const materials = this.materials.list().map(entry => {
+        // 26.1 returns [id, info] pairs; 26.2 returns material-info objects.
+        const [id, info] = Array.isArray(entry) ? entry : [entry?.id, entry];
+        if ((typeof id !== 'number' && typeof id !== 'string') ||
+            (typeof id === 'string' && !id.trim()) || !Number.isInteger(Number(id)) ||
+            !info || typeof info !== 'object') {
+          throw new Error('Unsupported native appearance material entry');
+        }
         const material = this.materials.get(id);
         return {
           id: Number(id),

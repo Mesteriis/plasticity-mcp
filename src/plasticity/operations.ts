@@ -4749,7 +4749,8 @@ export class PlasticityOperations {
           } else if (materialId !== 0 && !nativeApi.db.materials.has(materialId)) {
             throw new Error('Appearance material ID is no longer current: ' + materialId);
           }
-          for (const view of views) nativeApi.db.nodes.setMaterial(nativeApi.db.nodes.item2key(view), materialId);
+          // Public ID 0 means no assignment; native node state uses undefined.
+          for (const view of views) nativeApi.db.nodes.setMaterial(nativeApi.db.nodes.item2key(view), materialId === 0 ? undefined : materialId);
         } catch (error) {
           failure = error;
           throw error;

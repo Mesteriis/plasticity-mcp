@@ -56,6 +56,11 @@ on both success and rejection. Remote debugging remains bound to loopback.
 - Control-point ID zero is accepted by MCP, as returned by 26.2.1. Negative,
   duplicate, unknown and stale references remain rejected.
 
+- Material state reads accept legacy `[id, info]` pairs and 26.2 material-info
+  objects without changing the public appearance fields or revision semantics.
+  Malformed entries reject explicitly. Public appearance ID zero is translated
+  to the native unset value for clearing an assignment inside the owned command.
+
 ## Catalog audit follow-up
 
 The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every
