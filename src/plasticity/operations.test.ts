@@ -9,6 +9,7 @@ import { frameFromOriginNormalX } from "./construction.ts";
 import { evaluateSvgCubicBezier, type SvgCubicBezier } from "./svg-cubic.ts";
 import { countActiveCurveSpans } from "./curve-span-count.ts";
 import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
+import { LONG_NATIVE_IMPORT_TIMEOUT_MS } from "./runtime.ts";
 
 const emptyConstruction: RuntimeState["construction"] = {
   planes: [],
@@ -16,6 +17,70 @@ const emptyConstruction: RuntimeState["construction"] = {
   planeStateToken: "planes:empty",
   viewStateToken: "workplane:standard:top",
 };
+
+test("document opening backs up first and uses the native scene/history replacement lifecycle", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-open-test-"));
+  const input = join(root, "empty.plasticity");
+  const backup = join(root, "backup.plasticity");
+  const header = Buffer.alloc(24); header.write("plasticity");
+  await writeFile(input, header);
+  const events: string[] = [];
+  let state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "fixture", revision: "r1", dbVersion: 1, undoDepth: 5, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const editor = {
+    executor: { isBusy: false }, document: { filename: "fixture.plasticity" },
+    async open(path: string) {
+      events.push("open");
+      assert.deepEqual(await readFile(backup), header);
+      this.document.filename = path;
+      state = { ...state, documentToken: "empty", revision: "r2", undoDepth: 0, redoDepth: 0 };
+    },
+  };
+  const runtime = {
+    async getState() { return state; },
+    async mutate(source: string, bindings: string[], values: unknown[], timeout: number) {
+      assert.deepEqual(bindings, []);
+      assert.equal(timeout, LONG_NATIVE_IMPORT_TIMEOUT_MS);
+      return await Function(`return (${source})`)().apply(editor, values);
+    },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  operations.saveCopy = async (path: string) => { events.push("backup"); await writeFile(path, header); return { path, bytes: header.length }; };
+  try {
+    const opened = await operations.openDocument(input, backup, "r1");
+    assert.deepEqual(events, ["backup", "open"]);
+    assert.equal(opened.documentToken, "empty");
+    assert.equal(opened.undoDepth, 0);
+    assert.equal(opened.bodies.length, 0);
+    editor.open = async () => { throw new Error("native open failed"); };
+    await assert.rejects(operations.openDocument(input, backup, "r2"), /native open failed/);
+    editor.open = async () => { editor.document.filename = backup; };
+    await assert.rejects(operations.openDocument(input, backup, "r2"), /did not open the requested document/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("document opening never invokes native open when validation or backup fails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-open-reject-test-"));
+  const input = join(root, "invalid.plasticity");
+  await writeFile(input, "invalid");
+  const runtime = {
+    async getState() { return { revision: "r1", construction: emptyConstruction, bodies: [], regions: [] }; },
+    async mutate() { assert.fail("must not mutate before validation and backup succeed"); },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  let backups = 0;
+  operations.saveCopy = async () => { backups += 1; throw new Error("backup failed"); };
+  try {
+    await assert.rejects(operations.openDocument(input, join(root, "backup.plasticity"), "r1"), /not a valid Plasticity document/);
+    assert.equal(backups, 0);
+    const header = Buffer.alloc(24); header.write("plasticity"); await writeFile(input, header);
+    await assert.rejects(operations.openDocument(input, join(root, "backup.plasticity"), "r1"), /backup failed/);
+    assert.equal(backups, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("screenshot refuses a stale renderer surface while Plasticity is hidden", async () => {
   const root = await mkdtemp(join(tmpdir(), "plasticity-screenshot-hidden-test-"));

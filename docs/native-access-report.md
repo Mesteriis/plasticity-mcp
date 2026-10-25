@@ -1252,6 +1252,12 @@ instances, and groups, and group hierarchy contributes to the document
 revision so stale references are rejected after manual or agent changes.
 `ActivateGroupCommand` changes the native active creation destination in one
 history step; ID 0 restores the root `Scene` group.
+Document replacement uses the native `editor.open(path)` lifecycle, with a
+backup saved before opening and a check of the resulting filename. Committing
+`OpenFileFactory` directly skips scene/history lifecycle work: opening an empty
+file can leave geometry behind, and Undo can restore the previous scene. The
+visibility-after-load acceptance exercises replacement and restoration of its
+empty disposable document through this native path.
 The selection database exposes bodies, `InstanceEmpty` records, groups, faces,
 and edges as separate collections. The MCP maps those values to stable body,
 instance, group, and revision-bound topology IDs in both directions. An agent
