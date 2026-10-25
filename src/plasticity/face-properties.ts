@@ -99,7 +99,7 @@ export async function measureFaceProperties(
     source: "native-brep-face-mass-properties",
     faces: measured,
     totals: { areaMm2, summedBoundaryLengthMm, areaWeightedCentroidMm },
-    limitation: "Summed boundary length counts every selected face boundary independently; shared edges are counted once for each selected face that uses them.",
+    limitation: "Summed boundary length counts every selected face boundary independently; shared edges are counted once for each selected face that uses them. Native inner-loop counts describe carrier topology; periodic curved faces can classify all their loops as inner.",
   };
 }
 
@@ -187,7 +187,11 @@ function validateNativeResult(result: NativeFaceProperties, reference: FaceRefer
   if (!Number.isFinite(result.areaM2) || result.areaM2 <= 0) throw new Error(`Invalid native area for ${reference.bodyId}:${reference.faceId}`);
   if (!Number.isFinite(result.boundaryLengthM) || result.boundaryLengthM <= 0) throw new Error(`Invalid native boundary length for ${reference.bodyId}:${reference.faceId}`);
   if (result.areaCentroidM.length !== 3 || !result.areaCentroidM.every(Number.isFinite)) throw new Error(`Invalid native area centroid for ${reference.bodyId}:${reference.faceId}`);
-  if (!Number.isInteger(result.loopCount) || !Number.isInteger(result.innerLoopCount) || result.loopCount < 1 || result.innerLoopCount < 0 || result.innerLoopCount >= result.loopCount) {
+  // A bounded planar face needs an outer loop. Periodic carriers such as a
+  // complete cylindrical side can classify both end loops as native inner loops.
+  if (!Number.isInteger(result.loopCount) || !Number.isInteger(result.innerLoopCount)
+    || result.loopCount < 1 || result.innerLoopCount < 0 || result.innerLoopCount > result.loopCount
+    || (result.planar && result.innerLoopCount === result.loopCount)) {
     throw new Error(`Invalid native face-loop counts for ${reference.bodyId}:${reference.faceId}`);
   }
   if (!Array.isArray(result.nativeCheckCodes) || result.nativeCheckCodes.some((code) => !Number.isInteger(code))) {

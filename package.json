@@ -61,6 +61,7 @@
     "accept:native-hiddenline-svg": "node scripts/verify-native-hiddenline-svg-live.ts",
     "accept:native-slot-profiles": "node scripts/verify-native-slot-profiles-live.ts",
     "accept:native-cone": "node scripts/verify-native-cone-live.ts",
+    "accept:native-sheets-features": "node scripts/verify-native-sheets-features-live.ts",
     "accept:native-patterns-recipes": "node scripts/verify-native-patterns-recipes-live.ts",
     "accept:native-core-catalog": "node scripts/verify-native-core-catalog-live.ts",
     "accept:native-sphere": "node scripts/verify-native-sphere-live.ts",
