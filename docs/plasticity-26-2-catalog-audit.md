@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-25. The current continuation starts from merged PR #13
-(`0ce1ae4d2703fe1443e49586034262edce0a78d9`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-25. The current continuation starts from merged PR #14
+(`0905f46eeb08bbb372728d51d6ad91ebcf39f6af`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 69 | 77 |
+| Completed passing fixtures | 81 | 89 |
 | Failing or blocked fixtures | 4 | 4 |
-| Tools with success in an application-connected passing fixture | 168 | 211 |
+| Tools with success in an application-connected passing fixture | 178 | 221 |
 | Tools attempted only in unaccepted fixtures | 7 | 7 |
-| Tools without a recorded application-connected live call | 196 | 153 |
+| Tools without a recorded application-connected live call | 186 | 143 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -71,6 +71,58 @@ Initial authored checks incorrectly assumed that face extrusion and pipe
 creation replace their sources, used Solid edges to measure a Wire, and treated
 the native pipe sweep as an analytic cylinder. Those runs were not accepted;
 only corrected, completed passing fixtures contribute to the matrix.
+
+## Patterns, curves and hole recipes
+
+Twelve scenarios completed successfully on each experimental version.
+
+`npm run accept:native-patterns-recipes -- --target ID --allow-disposable-mutations
+--case CASE --output NEW_DIRECTORY` selects one of twelve guarded cases:
+
+- `mirror-copy`, `mirror-move`, `mirror-crossing-copy`, `mirror-crossing-move`:
+  complete reflected boxes, with separate copy/replacement checks for boxes
+  beside or crossing the specified plane; exact volumes and mass centroids.
+- `rectangular-pattern`: six boxes at a 3 × 2 grid with 8 and 10 mm spacing.
+- `radial-pattern`: four boxes at 90° intervals, including the source position.
+- `rename`: same body identity, geometry and new name.
+- `rectangle-dimensions`: centered rectangle with 20 and 8 mm native local
+  dimensions, four exact Line segments and its updated Region. For this fixture
+  native width maps to world Y and length to world X.
+- `reverse-curves`: reverse an open two-segment Wire, preserving segment lengths
+  and exchanging its exact start/end; verify two native endpoints.
+- `unjoin-curves`: four independent open Lines with the original rectangle's
+  exact corners and lengths; verify eight native endpoints, their corner coordinates and body ownership.
+- `counterbore`: a 20 × 20 × 10 mm block with Ø4 through hole and Ø8 recess
+  3 mm deep; volume 4000 − 76π mm³, native radii 2/4 mm and shoulder Z=7 mm.
+- `connector-opening`: a 30 × 20 × 10 mm block with a 10 × 4 mm through opening
+  and R1 corners; volume 6000 − 10(36 + π) mm³, four exact cylindrical corner
+  faces and one retained editable profile.
+
+Every case checks the advertised history length, Undo to the source, Redo with
+stable result IDs, geometry again after Redo, and restoration of the empty
+snapshot. Counterbore and rounded connector recipes expose three and four
+history steps respectively; the remaining operations expose one. Solid volume
+and centroid tolerances are 0.0001 mm³ and 0.00001 mm. Wire lengths and point
+coordinates use 0.00001 mm.
+
+### Whole-body mirror correction
+
+The old adapter treated native `MirrorFactory.move` as a Boolean copy flag.
+Both application versions actually expose a numeric mirror-offset distance with
+initial value zero. Passing `true` shifted the reflected result by one metre
+and left the source in the document. Turning off the separate native cutting
+mode alone did not fix that error.
+
+The adapter now sets that distance to zero and explicitly disables native
+cutting and union. Replacement mode commits the mirrored bodies, then deletes
+only the explicit source views through a native database transaction inside
+the same owned command, after verifying one newly committed reflected body
+per source. Copy mode retains its sources. Replacement bodies may
+have new IDs; Undo restores the original IDs and Redo restores the result IDs.
+Unit regressions execute the generated native function, verify distance/flags,
+copy versus deletion, stale/duplicate-source rejection and that failed or
+missing reflected results never start source deletion. Earlier failed mirror and authored rectangle-axis
+checks are superseded only by passing runs of the same case in the matrix.
 
 ## Compatibility fixes found by the audit
 
