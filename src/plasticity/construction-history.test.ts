@@ -71,3 +71,18 @@ function historyEntry(occurredAt: string, status: ConstructionHistoryEntry["stat
     },
   };
 }
+
+test("durable native bounds provenance survives restart while malformed methods reject", async (context) => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-bounds-history-"));
+  context.after(async () => rm(root, { recursive: true, force: true }));
+  const entry = historyEntry("2026-09-24T10:00:00.000Z", "completed");
+  entry.change.added[0]!.boundsMethod = "native-extrema";
+  const store = new ConstructionHistoryStore(root);
+  await store.append(entry);
+  const restarted = await new ConstructionHistoryStore(root).list();
+  assert.equal(restarted.entries[0]?.change.added[0]?.boundsMethod, "native-extrema");
+  const bad = structuredClone(entry);
+  (bad.change.added[0] as unknown as { boundsMethod: string }).boundsMethod = "unverified";
+  await assert.rejects(store.append(bad));
+  assert.equal((await store.list()).total, 1);
+});

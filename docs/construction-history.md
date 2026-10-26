@@ -43,3 +43,9 @@ The live acceptance is
 creation, Undo, STEP import, MCP restart, history readback, final Undo, and
 empty-scene recovery against Plasticity 26.1.3 using isolated temporary files
 and stores.
+
+
+Body summaries may include `boundsMethod` (`native-extrema` or `native-box`).
+This provenance is preserved on write/read and is optional for older records.
+An absent method does not certify tight bounds. See [native bounds and Helix](native-bounds-and-helix.md)
+for cache/revision invalidation and current parameter restrictions.

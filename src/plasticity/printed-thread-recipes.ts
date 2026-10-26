@@ -1,3 +1,4 @@
+import { requireWholeHelixTurns } from "./helix-turns.ts";
 import { add, cross, normalize, scale, subtract, type Vector3 } from "./construction.ts";
 import type { PlasticityOperations } from "./operations.ts";
 import { mutationOutcomeIsUncertain, type RuntimeState } from "./runtime.ts";
@@ -291,7 +292,7 @@ export class PrintedThreadRecipes {
     const axis = normalize(input.axis, "Thread axis");
     const radial = perpendicularDirection(axis, input.radialDirection, "Thread radial direction");
     const axisEnd = add(input.axisStartMm, scale(axis, input.threadLengthMm));
-    const turns = input.threadLengthMm / input.pitchMm;
+    const turns = requireWholeHelixTurns(input.threadLengthMm / input.pitchMm);
     const completedSteps: PrintedThreadStep[] = [];
     const consumedToolIds: number[] = [];
     let current = initial;
@@ -614,7 +615,7 @@ export class PrintedThreadRecipes {
     const extendedStart = subtract(input.entryCenterMm, scale(axis, input.cutterOvershootMm));
     const extendedLength = input.materialDepthMm + input.cutterOvershootMm * 2;
     const extendedEnd = add(extendedStart, scale(axis, extendedLength));
-    const turns = extendedLength / input.pitchMm;
+    const turns = requireWholeHelixTurns(extendedLength / input.pitchMm);
     const completedSteps = [...previousSteps];
     const consumedToolIds: number[] = [];
     let current = initial;
@@ -672,6 +673,7 @@ export function printedThreadGeometry(input: Pick<PrintedThreadDefinition, "nomi
 
 function validateExternal(input: PrintedExternalThreadInput): PrintedThreadGeometry {
   validateCommon(input, input.threadLengthMm, 0);
+  requireWholeHelixTurns(input.threadLengthMm / input.pitchMm);
   validatePoint(input.axisStartMm, "Thread axis start");
   return printedThreadGeometry({ ...input, profileClearanceMm: 0 });
 }
@@ -681,6 +683,7 @@ function validateInternal(input: PrintedInternalThreadInput): PrintedThreadGeome
   validateCommon(input, input.materialDepthMm, input.profileClearanceMm);
   validatePoint(input.entryCenterMm, "Thread entry center");
   positive(input.cutterOvershootMm, "Thread cutter overshoot");
+  requireWholeHelixTurns((input.materialDepthMm + input.cutterOvershootMm * 2) / input.pitchMm);
   return printedThreadGeometry(input);
 }
 

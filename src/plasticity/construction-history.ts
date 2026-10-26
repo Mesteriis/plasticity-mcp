@@ -24,9 +24,9 @@ export const constructionHistoryEntrySchema = z.object({
   change: z.object({
     changed: z.boolean(),
     documentChanged: z.boolean(),
-    added: z.array(z.object({ id: z.number().int().positive(), type: z.string(), name: z.string().nullable(), boundsMm: boundsSchema.nullable(), faceCount: z.number().int().nonnegative(), edgeCount: z.number().int().nonnegative() }).strict()).max(10_000),
-    removed: z.array(z.object({ id: z.number().int().positive(), type: z.string(), name: z.string().nullable(), boundsMm: boundsSchema.nullable(), faceCount: z.number().int().nonnegative(), edgeCount: z.number().int().nonnegative() }).strict()).max(10_000),
-    modified: z.array(z.object({ id: z.number().int().positive(), renamed: z.boolean(), geometryChanged: z.boolean(), appearanceChanged: z.boolean(), visibilityChanged: z.boolean(), body: z.object({ id: z.number().int().positive(), type: z.string(), name: z.string().nullable(), boundsMm: boundsSchema.nullable(), faceCount: z.number().int().nonnegative(), edgeCount: z.number().int().nonnegative() }).strict() }).strict()).max(10_000),
+    added: z.array(z.object({ id: z.number().int().positive(), type: z.string(), name: z.string().nullable(), boundsMm: boundsSchema.nullable(), boundsMethod: z.enum(["native-box", "native-extrema"]).optional(), faceCount: z.number().int().nonnegative(), edgeCount: z.number().int().nonnegative() }).strict()).max(10_000),
+    removed: z.array(z.object({ id: z.number().int().positive(), type: z.string(), name: z.string().nullable(), boundsMm: boundsSchema.nullable(), boundsMethod: z.enum(["native-box", "native-extrema"]).optional(), faceCount: z.number().int().nonnegative(), edgeCount: z.number().int().nonnegative() }).strict()).max(10_000),
+    modified: z.array(z.object({ id: z.number().int().positive(), renamed: z.boolean(), geometryChanged: z.boolean(), appearanceChanged: z.boolean(), visibilityChanged: z.boolean(), body: z.object({ id: z.number().int().positive(), type: z.string(), name: z.string().nullable(), boundsMm: boundsSchema.nullable(), boundsMethod: z.enum(["native-box", "native-extrema"]).optional(), faceCount: z.number().int().nonnegative(), edgeCount: z.number().int().nonnegative() }).strict() }).strict()).max(10_000),
     addedConstructionPlaneIds: z.array(z.string().max(512)).max(10_000),
     removedConstructionPlaneIds: z.array(z.string().max(512)).max(10_000),
     modifiedConstructionPlaneIds: z.array(z.string().max(512)).max(10_000),

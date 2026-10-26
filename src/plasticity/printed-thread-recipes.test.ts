@@ -50,7 +50,7 @@ test("creates a standalone exact external rounded thread and clips it to its cre
   assert.equal(result.undoSteps, 6);
   assert.deepEqual(result.consumedToolIds, [3, 4]);
   assert.deepEqual(fake.calls.map((call) => call.name), ["createCylinder", "createHelix", "createPipes", "boolean", "createCylinder", "boolean"]);
-  assert.deepEqual(fake.calls[1]!.args.slice(0, 4), [[0, 0, 0], [0, 0, 8], 2.2, 6.4]);
+  assert.deepEqual(fake.calls[1]!.args.slice(0, 4), [[0, 0, 0], [0, 0, 10], 2.2, 8]);
   assert.deepEqual(fake.calls[2]!.args.slice(0, 3), [[2], 0.66, 0]);
   assert.deepEqual(fake.calls[5]!.args.slice(0, 4), [[1], [4], "intersection", false]);
 });
@@ -256,7 +256,7 @@ test("rejects overlapping turns, an unprintable nut wall, and stale targets befo
 function externalInput(): PrintedExternalThreadInput {
   return {
     axisStartMm: [0, 0, 0], axis: [0, 0, 1], radialDirection: [1, 0, 0],
-    threadLengthMm: 8, nominalDiameterMm: 5, pitchMm: 1.25, threadDepthMm: 0.6,
+    threadLengthMm: 10, nominalDiameterMm: 5, pitchMm: 1.25, threadDepthMm: 0.6,
     handedness: "right", name: "Printed M5-like stud", revision: "r0",
   };
 }
@@ -264,7 +264,7 @@ function externalInput(): PrintedExternalThreadInput {
 function internalInput(): PrintedInternalThreadInput {
   return {
     targetId: 10, entryCenterMm: [0, 0, 0], axis: [0, 0, 1], radialDirection: [1, 0, 0],
-    materialDepthMm: 8, nominalDiameterMm: 5, pitchMm: 1.25, threadDepthMm: 0.6,
+    materialDepthMm: 4, nominalDiameterMm: 5, pitchMm: 1.25, threadDepthMm: 0.6,
     profileClearanceMm: 0.15, cutterOvershootMm: 0.5, handedness: "right", revision: "r0",
   };
 }
@@ -272,7 +272,7 @@ function internalInput(): PrintedInternalThreadInput {
 function nutInput(): PrintedHexNutInput {
   return {
     entryCenterMm: [0, 0, 0], axis: [0, 0, 1], flatNormalDirection: [1, 0, 0],
-    radialDirection: [1, 0, 0], acrossFlatsMm: 9, thicknessMm: 8, minimumWallThicknessMm: 1.5,
+    radialDirection: [1, 0, 0], acrossFlatsMm: 9, thicknessMm: 4, minimumWallThicknessMm: 1.5,
     nominalDiameterMm: 5, pitchMm: 1.25, threadDepthMm: 0.6, profileClearanceMm: 0.15,
     cutterOvershootMm: 0.5, handedness: "right", revision: "r0",
   };
@@ -293,9 +293,9 @@ function pairInput(): PrintedHexPairInput {
   return {
     screwAxisStartMm: [0, 0, 0], nutEntryCenterMm: [15, 0, 0],
     axis: [0, 0, 1], radialDirection: [1, 0, 0], flatNormalDirection: [1, 0, 0],
-    threadLengthMm: 8, nominalDiameterMm: 5, pitchMm: 1.25, threadDepthMm: 0.6,
+    threadLengthMm: 10, nominalDiameterMm: 5, pitchMm: 1.25, threadDepthMm: 0.6,
     handedness: "right", screwHeadAcrossFlatsMm: 9, screwHeadHeightMm: 3,
-    screwJunctionOverlapMm: 0.2, nutAcrossFlatsMm: 9, nutThicknessMm: 8,
+    screwJunctionOverlapMm: 0.2, nutAcrossFlatsMm: 9, nutThicknessMm: 4,
     nutMinimumWallThicknessMm: 1.5, profileClearanceMm: 0.15, cutterOvershootMm: 0.5,
     screwName: "Printed matching hex screw", revision: "r0",
   };
@@ -363,3 +363,15 @@ function state(revision: string, bodies: Array<Record<string, unknown>>, regions
 function solid(id: number): Record<string, unknown> { return { id, versionId: id + 100, type: "Solid", name: null, boundsMm: { min: [0, 0, 0], max: [1, 1, 1] }, faceIds: [], edgeIds: [], faces: [], edges: [] }; }
 function wire(id: number): Record<string, unknown> { return { ...solid(id), type: "Wire" }; }
 function region(id: string, wireId: number): Record<string, unknown> { return { id, sketchWireIds: [wireId], displayBoundsMm: { min: [-5, -5, 0], max: [5, 5, 0] } }; }
+
+test("unsupported fractional threads reject before any native recipe step, including composed pairs", async () => {
+  const fake = new FakeOperations(state("r0", [solid(10)]), []);
+  const recipes = new PrintedThreadRecipes(fake as never);
+  await assert.rejects(recipes.createExternalThread({ ...externalInput(), threadLengthMm: 5, pitchMm: 2 }), /Fractional Helix/);
+  await assert.rejects(recipes.cutInternalThread({ ...internalInput(), materialDepthMm: 4, pitchMm: 2 }), /Fractional Helix/);
+  await assert.rejects(recipes.createHexNut({ ...nutInput(), thicknessMm: 4, pitchMm: 2 }), /Fractional Helix/);
+  await assert.rejects(recipes.createHexScrew({ ...screwInput(), threadLengthMm: 5, pitchMm: 2 }), /Fractional Helix/);
+  await assert.rejects(recipes.createHexPair({ ...pairInput(), nutThicknessMm: 4, pitchMm: 2 }), /Fractional Helix/);
+  await assert.rejects(recipes.createCalibrationSet({ ...calibrationInput(), nutThicknessMm: 4, pitchMm: 2 }), /Fractional Helix/);
+  assert.equal(fake.calls.length, 0);
+});

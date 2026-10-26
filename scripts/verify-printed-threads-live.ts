@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { isolatedAcceptanceEnvironment } from "./verify-native-measure-datum-files-live.ts";
+
 import { hydrateNativeState } from "./native-live-state.ts";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -133,6 +135,11 @@ async function main(): Promise<void> {
       handedness: "right",
       radialDirection: [1, 0, 0],
     };
+    const nutThicknessMm = 8;
+    const cutterOvershootMm = 1;
+    const phaseOffsetMm = cutterOvershootMm;
+    evidence.fixtureParameters = { ...definition, nutThicknessMm, cutterOvershootMm, phaseOffsetMm };
+    // Explicit 1 mm overshoot gives (8 + 2)/1.25 = 8 whole cutter turns.
     const pair = await call(live.client, "plasticity_create_printed_hex_pair", {
       designation: "напечатай винт M5x10 и ответную гайку",
       pitchMm: definition.pitchMm,
@@ -142,8 +149,8 @@ async function main(): Promise<void> {
       screwAxisStartMm: [0, 0, 0], nutEntryCenterMm: [15, 0, 0],
       axis: [0, 0, 1], radialDirection: definition.radialDirection, flatNormalDirection: [1, 0, 0],
       screwHeadAcrossFlatsMm: 9, screwHeadHeightMm: 3, screwJunctionOverlapMm: 0.2,
-      nutAcrossFlatsMm: 9, nutThicknessMm: 8, nutMinimumWallThicknessMm: 1.5,
-      cutterOvershootMm: 0.5, screwName: "Disposable printed hex screw",
+      nutAcrossFlatsMm: 9, nutThicknessMm, nutMinimumWallThicknessMm: 1.5,
+      cutterOvershootMm, screwName: "Disposable printed hex screw",
       process: {
         printerId: "Creality K1C",
         materialId: "Generic PLA",
@@ -179,7 +186,7 @@ async function main(): Promise<void> {
     requireCondition(validation.bodies.every((body: { nativeValid: boolean; printableSolid: boolean; nativeCheckCodes: number[] }) => body.nativeValid && body.printableSolid && body.nativeCheckCodes.length === 0), "A printed thread body failed native validation");
 
     state = await call(live.client, "plasticity_move", {
-      ids: [nut.resultBodyId], deltaMm: [-15, 0, 0.5],
+      ids: [nut.resultBodyId], deltaMm: [-15, 0, phaseOffsetMm],
       intent: "Align the matched nut axis and helix phase for disposable acceptance", revision: state.revision,
     });
     const aligned = await call(live.client, "plasticity_check_interference", {
@@ -188,7 +195,7 @@ async function main(): Promise<void> {
     requireCondition(aligned.pairs[0]?.status === "no-volumetric-interference", `Aligned custom thread pair did not clear: ${JSON.stringify(aligned.pairs[0])}`);
 
     state = await call(live.client, "plasticity_rotate", {
-      ids: [nut.resultBodyId], pivotMm: [0, 0, 0.5], axis: [0, 0, 1], degrees: 90,
+      ids: [nut.resultBodyId], pivotMm: [0, 0, phaseOffsetMm], axis: [0, 0, 1], degrees: 90,
       intent: "Deliberately misalign the printed thread phase for disposable acceptance", revision: state.revision,
     });
     const misaligned = await call(live.client, "plasticity_check_interference", {
@@ -273,7 +280,7 @@ async function startMcp(storeRoot: string): Promise<LiveMcp> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" },
+    env: isolatedAcceptanceEnvironment(storeRoot, process.env),
     stderr: "pipe",
   });
   const stderr: string[] = [];
@@ -317,7 +324,6 @@ function stateSummary(state: any): Record<string, unknown> {
 }
 function near(actual: number, expected: number, tolerance: number, label: string): void { requireCondition(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, `${label}: expected ${expected} ± ${tolerance}, got ${actual}`); }
 function requireCondition(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> { return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : [])); }
 function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 4000); }
 async function writeExclusive(path: string, value: unknown): Promise<void> { await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 }); }
 

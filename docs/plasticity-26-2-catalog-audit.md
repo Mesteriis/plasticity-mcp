@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #20
-(`013d22ab77a0d2477532b7267cb55977eb67452a`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #21
+(`7763a6628bff9a2edcafd4c3568b800da1e3a316`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 130 | 138 |
-| Failing or blocked fixtures | 7 | 7 |
-| Tools with success in an application-connected passing fixture | 237 | 279 |
-| Tools attempted only in unaccepted fixtures | 10 | 10 |
-| Tools without a recorded application-connected live call | 124 | 82 |
+| Completed passing fixtures | 139 | 147 |
+| Failing or blocked fixtures | 12 | 10 |
+| Tools with success in an application-connected passing fixture | 247 | 289 |
+| Tools attempted only in unaccepted fixtures | 10 | 8 |
+| Tools without a recorded application-connected live call | 114 | 74 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -579,3 +579,125 @@ fuse, entitlement or system security setting was changed.
 Integration validation for the PR #21 continuation: `npm test` passed 1454 tests,
 `npm run typecheck` passed, Workbench passed 90 tests, its typecheck and production
 build. The build retains the advisory warning about chunks larger than 500 kB.
+
+## Standalone printed-thread qualification
+
+The following initial results are historical; the correction and qualified
+inputs are recorded in the next section.
+
+Six standalone public-tool scenarios were executed on each experimental copy.
+**0/6 passed on either version.** All six failed the predeclared 0.01 mm nominal
+body-envelope check; the internal-thread and nut cases also failed their Helix
+length/axial-range checks. Successful calls from these fixtures are excluded
+from accepted coverage. The four standalone thread tools move from unobserved
+to attempted-unaccepted; accepted counts remain 279/371 and 237/371.
+
+`npm run accept:native-thread-tools -- --target ID
+--allow-disposable-mutations --case CASE --output NEW_DIRECTORY` selects one
+explicit, isolated fixture. All use synthetic Ø8, pitch 2 mm, radial depth
+0.8 mm, axial length/material thickness 4 mm and axis +Z. Female profiles use
+0.2 mm clearance and 0.5 mm cutter overshoot. Hex across-flats size is 12 mm;
+the screw head is 3 mm high with 0.5 mm junction overlap.
+
+| Case | Confirmed recipe steps | Native body Z bounds, approximately (mm) | Failed gates |
+| --- | ---: | --- | --- |
+| `external-right` | 6 | −0.426057 … 4.426100 | Expected 0 … 4 |
+| `external-left` | 6 | −0.426057 … 4.426100 | Expected 0 … 4 |
+| `internal-right` | 4 | −1.285330 … 5.461694 | Expected 0 … 4; fractional Helix length and end |
+| `internal-left` | 4 | −1.285330 … 5.461695 | Expected 0 … 4; fractional Helix length and end |
+| `hex-nut` | 6 | −1.285330 … 5.461694 | Expected 0 … 4; fractional Helix length and end |
+| `hex-screw` | 9 | −3 … 4.425733 | Expected −3 … 4 |
+
+Both versions returned essentially the same deviations. Native Check passed
+for all result/control Solids, no temporary cutters remained, and the unrelated
+24 mm³ control Solid was unchanged. Volumes fell strictly between independent
+core/crest or bore/groove-cylinder bounds; this is a bounded-volume check, not
+an exact closed-form prediction of the clipped rounded thread's volume.
+Expected native core/bore cylinders and editable hex profiles were present.
+
+The runner samples six native Helix positions and unit tangents. For the +Z
+axis, `(x * tangentY - y * tangentX) * tangentZ` was positive for right-hand and
+negative for left-hand inputs. The sampled radii and right/left direction checks
+passed. This does not qualify physical mating, standard hardware compatibility
+or the full continuous profile to a certified error bound.
+
+### Fractional Helix diagnostic
+
+The female cutter requests an extended Helix from Z=−0.5 to Z=4.5 mm: 5 mm at
+pitch 2 mm means 2.5 turns and nominal length 56.76928593837475 mm. Both versions
+reported native length 59.0401069072201 mm and end Z=4.7 mm instead. The retained
+curve therefore fails the 0.001 mm length/end tolerance. Integer two-turn
+external Helices passed those particular curve checks.
+
+An independent 26.2 probe read the same Helix descriptor before and after native
+Pipe creation; it was unchanged. The overrun is already present before Pipe.
+The native Spiral factory's configured length was 0.005 m and turns 2.5, so this
+observation is not explained by an incorrectly supplied meter/millimeter length.
+This does not establish a 26.2-specific regression: the standalone 26.1 fixtures
+show the same measured curve overrun. The body-box discrepancies alone do not
+prove physical material outside the clipping envelope; native `FindBox` behavior
+for trimmed sweep surfaces needs separate investigation.
+
+The initial envelope failures halted qualification before curve diagnostics.
+The revised runner retains every gate, collects independent read-only results
+before reporting their combined failures, and writes those results as failure
+evidence. No tolerance was increased after the runs. Full recipe Undo/Redo
+qualification was **not reached**, so it is not claimed. Confirmed owned recovery
+Undo restored an empty document after every failed run; final read-only
+reconciliation found both copies empty and idle. No production adapter or
+application/security configuration was changed in this continuation. Earlier
+STEP, circular-imprint, cable-channel and rendering gaps remain open; earlier
+printed-pair scenarios remain separate evidence for their different inputs.
+
+Automated checks: `npm test` passed 1458 tests, `npm run typecheck` passed,
+Workbench passed 90 tests, its typecheck and production build. The build retains
+the advisory warning about chunks larger than 500 kB. These green automated
+checks do not qualify any of the six failing live scenarios.
+
+
+## Bounds and whole-turn thread correction
+
+Native `FindBox` includes empty space around trimmed spline surfaces. The
+26.2.1 adapter now uses native `Eval.Extremes` for Solid/Sheet bounds, with
+`boundsMethod: native-extrema`. The 26.1.3 kernel has no such capability and
+retains conservative `native-box` bounds. Failed extrema evaluations raise an
+error. Optional provenance survives compact summaries and durable history;
+old history remains readable. See [the API and input constraints](native-bounds-and-helix.md).
+
+Fractional Helix turns are rejected before geometry creation on both versions.
+No pitch, length or overshoot is silently adjusted. All composed recipes check
+members' turn constraints before their first geometry step.
+
+Seven scenarios now pass on **both copies (7/7 each)**: external right/left,
+internal right/left with explicit 1 mm overshoot, hex nut with explicit 1 mm
+overshoot, hex screw, and fractional preflight. Native extrema where available
+and six temporary B-Rep envelope intersections distinguish actual material from
+conservative boxes. The original 0.01 mm envelope and 0.001 mm Helix tolerances
+remain. The supported recipes pass native checks, sampled curve length/end and
+handedness, full Undo/Redo with stable IDs, source restoration and exact durable
+history counts/synchronization. Fractional preflight rejects direct Helix and
+all four standalone tools without changing revision or native history.
+
+The M5 pair also passes on each version using **explicit 1 mm cutter overshoot**
+and matching axial phase translation: no interference aligned, interference at
+90 degrees, and Undo restores alignment. The original 8 mm nut / 1.25 mm pitch /
+0.5 mm overshoot requests 7.2 turns and is retained as
+`unsupported-fractional-turns`, not accepted with altered inputs.
+
+The two-nut calibration set passes on both copies with explicit M5x10 screw
+length and 1 mm cutter overshoot (eight turns each). The original M5x8 /
+0.5 mm overshoot fixture rejects before geometry and remains unsupported; its
+previous successful call is not retained as current acceptance. This calibration
+fixture checks native validity, clearance-dependent volume and cleanup Undo;
+full Redo is covered by the standalone fixtures rather than this set.
+
+On 26.2.1, strict STEP provenance and cable-channel bounds now pass, and Surface
+Bridge passes again with Sheet extrema (3/3). Legacy strict STEP/cable box gates
+remain unaccepted; no exact legacy box claim is made. Circular-imprint and
+rendering gaps remain. The matrix preserves unsupported original fractional
+fixtures and separates them from the explicit supported variants.
+
+Final automated checks: 1466 root tests and 90 Workbench tests pass; both
+typechecks and the Workbench build pass. The build retains its advisory warning
+about chunks larger than 500 kB. Both experimental documents were restored empty
+and idle; installed application and security settings were unchanged.

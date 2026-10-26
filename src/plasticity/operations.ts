@@ -1,3 +1,4 @@
+import { requireWholeHelixTurns } from "./helix-turns.ts";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
@@ -3445,6 +3446,7 @@ export class PlasticityOperations {
     if (revision) await this.assertRevision(revision);
     if (!Number.isFinite(radiusMm) || radiusMm <= 0) throw new Error("Helix radius must be positive");
     if (!Number.isFinite(turns) || turns <= 0) throw new Error("Helix turns must be positive");
+    turns = requireWholeHelixTurns(turns);
     const axis = axisEndMm.map((value, index) => value - axisStartMm[index]!) as Vector3;
     const axisLength = Math.hypot(...axis);
     if (!(axisLength > 1e-9)) throw new Error("Helix axis must have nonzero length");
