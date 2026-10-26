@@ -69,6 +69,11 @@ on both success and rejection. Remote debugging remains bound to loopback.
   Fractional parameters reject explicitly on both versions; no dimensions or
   pitch are silently adjusted. See [bounds and Helix compatibility](native-bounds-and-helix.md).
 
+- Curve imprint now accepts explicit normal projection, with no direction.
+  Existing vector calls retain their behavior. Analytic-circle qualification
+  passes for aligned and rotated planar targets on both versions; the vector
+  SPCurve/mass limitation remains. See [projection methods](curve-imprint-projection.md).
+
 ## Catalog audit follow-up
 
 The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every

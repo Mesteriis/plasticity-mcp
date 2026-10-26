@@ -26,4 +26,5 @@ test("catalog acceptance selects only known cases", () => {
   assert.throws(() => parseNativeAlignProjectAcceptanceArgs(["--help", "--case", "unknown"]), /Unknown catalog case/u);
   assert.throws(() => parseNativeAlignProjectAcceptanceArgs(["--case"]), /requires a value/u);
   assert.equal(parseNativeAlignProjectAcceptanceArgs(["--help", "--case", "named-selection"]).case, "named-selection");
+  for (const name of ["imprint-curve-normal", "imprint-curve-normal-oblique"]) assert.equal(parseNativeAlignProjectAcceptanceArgs(["--help", "--case", name]).case, name);
 });

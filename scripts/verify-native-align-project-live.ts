@@ -5,6 +5,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { assertPointSetNear } from "./verify-native-patterns-recipes-live.ts";
 
+import { isolatedAcceptanceEnvironment } from "./verify-native-measure-datum-files-live.ts";
+
 import { hydrateNativeState } from "./native-live-state.ts";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -14,7 +16,7 @@ import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-stren
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const ALIGN_PROJECT_CASES = ["align-vertices", "align-edges", "align-cylinders", "project-curve", "imprint-curve", "dissolve-face", "patch-hole", "extend-sheet", "draft-faces", "named-selection"] as const;
+export const ALIGN_PROJECT_CASES = ["align-vertices", "align-edges", "align-cylinders", "project-curve", "imprint-curve", "imprint-curve-normal", "imprint-curve-normal-oblique", "dissolve-face", "patch-hole", "extend-sheet", "draft-faces", "named-selection"] as const;
 type AlignProjectCase = typeof ALIGN_PROJECT_CASES[number];
 
 interface Options { case: AlignProjectCase; help: boolean; target?: string; output?: string; allowDisposableMutations: boolean }
@@ -48,7 +50,8 @@ const HELP = `Usage:
   node scripts/verify-native-align-project-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
 Cases: ${ALIGN_PROJECT_CASES.join(", ")} (select with --case).
-The audit documents the currently unaccepted strict circular-imprint case.
+The vector circular-imprint case remains a strict diagnostic. The explicit normal
+projection cases check analytic circles on aligned and rotated planar targets.
 
 No-argument and --help modes do not connect to Plasticity. Live mode requires
 an explicit empty disposable document, verifies native alignment, projection and topology edits and
@@ -93,7 +96,8 @@ async function main(): Promise<void> {
       await mutate("plasticity_create_box", { originMm: [0, 0, 0], sizeMm: [10, 10, 10] });
       fixtureSolidId = state.bodies[0].id;
       if (options.case === "project-curve") await mutate("plasticity_create_polyline", { pointsMm: [[2, 5, 15], [8, 5, 15]], closed: false });
-      if (options.case === "imprint-curve") await mutate("plasticity_create_circle", { centerMm: [5, 5, 15], radiusMm: 2, normal: [0, 0, 1] });
+      if (options.case === "imprint-curve-normal-oblique") await mutate("plasticity_rotate", { ids: [fixtureSolidId], pivotMm: [5,5,5], axis: [0,1,0], degrees: 30 });
+      if (options.case.startsWith("imprint-curve")) await mutate("plasticity_create_circle", { centerMm: options.case === "imprint-curve-normal-oblique" ? [10,5,5+5*Math.sqrt(3)] : [5,5,15], radiusMm: 2, normal: options.case === "imprint-curve-normal-oblique" ? [0.5,0,Math.sqrt(3)/2] : [0,0,1] });
       if (options.case === "dissolve-face") {
         await mutate("plasticity_create_cylinder", { centerMm: [5, 5, 8], radiusMm: 2, heightMm: 5, axis: [0, 0, 1] });
         const cylinder = state.bodies.find((body: any) => body.type === "Solid" && body.id !== fixtureSolidId);
@@ -142,6 +146,12 @@ async function main(): Promise<void> {
       }
       case "project-curve": await mutate("plasticity_project_curves_onto_body", imprintArgs(source)); break;
       case "imprint-curve": await mutate("plasticity_imprint_curves_on_body", imprintArgs(source)); break;
+      case "imprint-curve-normal":
+      case "imprint-curve-normal-oblique": {
+        const { direction: _unusedDirection, ...args } = imprintArgs(source);
+        await mutate("plasticity_imprint_curves_on_body", { ...args, projectionMethod: "normal" });
+        evidence.projectionMethod = "normal"; break;
+      }
       case "dissolve-face": {
         const disk = solid.faces.find((face: any) => face.planar && face.edgeIds.length === 1 && solid.edges.find((edge: any) => edge.id === face.edgeIds[0])?.circle);
         requireCondition(disk, "Imprinted planar disk missing");
@@ -178,7 +188,7 @@ async function main(): Promise<void> {
     requireCondition(state.undoDepth === source.undoDepth + 1, "Operation must create exactly one native history step");
     const check = async (): Promise<void> => {
       evidence.observedBodies = state.bodies.map((body: any) => ({ id: body.id, type: body.type, boundsMm: body.boundsMm,
-        ...(options.case === "imprint-curve" ? { faces: body.faces.map((face: any) => ({ surfaceType: face.surfaceType, planar: face.planar, centerMm: face.centerMm })), edges: body.edges.map((edge: any) => ({ curveType: edge.curveType, lengthMm: edge.lengthMm })) } : {}) }));
+        ...(options.case.startsWith("imprint-curve") ? { faces: body.faces.map((face: any) => ({ surfaceType: face.surfaceType, planar: face.planar, centerMm: face.centerMm })), edges: body.edges.map((edge: any) => ({ curveType: edge.curveType, lengthMm: edge.lengthMm })) } : {}) }));
       for (const wire of source.bodies.filter((body: any) => body.type === "Wire")) {
         const retained = state.bodies.find((body: any) => body.id === wire.id && body.type === "Wire");
         requireCondition(retained, "Operation consumed a source Wire");
@@ -228,8 +238,8 @@ async function main(): Promise<void> {
       const result = solids.find((body: any) => fixtureSolidId === undefined || body.id === fixtureSolidId);
       requireCondition(result, "Target Solid missing");
       const t = Math.tan(5 * Math.PI / 180);
-      vectorNear(result.boundsMm.min, options.case === "draft-faces" ? [-10 * t, -10 * t, 0] : options.case === "named-selection" ? [0, 0, 5] : [0, 0, 0], 0.00001, "result minimum");
-      vectorNear(result.boundsMm.max, options.case === "draft-faces" ? [10 + 10 * t, 10 + 10 * t, 10] : options.case === "named-selection" ? [10, 10, 15] : [10, 10, 10], 0.00001, "result maximum");
+      vectorNear(result.boundsMm.min, options.case === "draft-faces" ? [-10 * t, -10 * t, 0] : options.case === "named-selection" ? [0, 0, 5] : options.case === "imprint-curve-normal-oblique" ? [2.5-2.5*Math.sqrt(3),0,2.5-2.5*Math.sqrt(3)] : [0, 0, 0], 0.00001, "result minimum");
+      vectorNear(result.boundsMm.max, options.case === "draft-faces" ? [10 + 10 * t, 10 + 10 * t, 10] : options.case === "named-selection" ? [10, 10, 15] : options.case === "imprint-curve-normal-oblique" ? [7.5+2.5*Math.sqrt(3),10,7.5+2.5*Math.sqrt(3)] : [10, 10, 10], 0.00001, "result maximum");
       if (options.case === "project-curve") {
         requireCondition(state.bodies.length === 3 && result.faces.length === 6 && result.edges.length === 12, "Projection changed target topology or output count");
         const directions = await call(client!, "plasticity_list_curve_directions", {});
@@ -238,7 +248,7 @@ async function main(): Promise<void> {
         requireCondition(projected?.segments.length === 1 && projected.segments[0].curveType === "Line", "Expected one projected Line");
         assertPointSetNear([projected.segments[0].startMm, projected.segments[0].endMm], [[2, 5, 10], [8, 5, 10]], 0.00001, "projected endpoints");
         near(projected.segments[0].lengthMm, 6, 0.00001, "projected length"); evidence.geometry = projected;
-      } else if (options.case === "imprint-curve" || options.case === "dissolve-face") {
+      } else if (options.case.startsWith("imprint-curve") || options.case === "dissolve-face") {
         requireCondition(state.bodies.length === 2, "Imprint/dissolve output count mismatch");
         if (options.case === "dissolve-face") {
           const cutter = source.bodies.find((body: any) => body.type === "Solid" && body.id !== solid.id);
@@ -247,11 +257,14 @@ async function main(): Promise<void> {
           vectorNear(retained.boundsMm.min, cutter.boundsMm.min, 0.00001, "retained cutter minimum");
           vectorNear(retained.boundsMm.max, cutter.boundsMm.max, 0.00001, "retained cutter maximum");
         } else requireCondition(state.bodies.some((body: any) => body.type === "Wire"), "Imprint consumed its curve");
-        requireCondition(result.faces.length === (options.case === "imprint-curve" ? 7 : 6) && result.edges.length === (options.case === "imprint-curve" ? 13 : 12), "Imprint/dissolve topology mismatch");
-        if (options.case === "imprint-curve") {
+        requireCondition(result.faces.length === (options.case.startsWith("imprint-curve") ? 7 : 6) && result.edges.length === (options.case.startsWith("imprint-curve") ? 13 : 12), "Imprint/dissolve topology mismatch");
+        if (options.case.startsWith("imprint-curve")) {
           const edge = result.edges.find((edge: any) => edge.circleGeometry);
           requireCondition(edge, "Exact imprinted circle missing");
-          near(edge.circleGeometry.radiusMm, 2, 0.00001, "imprint radius"); vectorNear(edge.circleGeometry.centerMm, [5, 5, 10], 0.00001, "imprint center");
+          near(edge.circleGeometry.radiusMm, 2, 0.00001, "imprint radius"); vectorNear(edge.circleGeometry.centerMm, options.case === "imprint-curve-normal-oblique" ? [7.5,5,5+2.5*Math.sqrt(3)] : [5,5,10], 0.00001, "imprint center");
+          near(edge.lengthMm, 4*Math.PI, 0.00001, "analytic imprint circumference");
+          const normal = options.case === "imprint-curve-normal-oblique" ? [0.5,0,Math.sqrt(3)/2] : [0,0,1];
+          near(Math.abs(edge.circleGeometry.normal.reduce((sum: number, value: number, index: number) => sum + value * normal[index]!, 0)), 1, 1e-8, "imprint normal alignment");
         }
       } else {
         requireCondition(state.bodies.length === 1 && result.faces.length === 6 && result.edges.length === 12, "Box/frustum topology mismatch");
@@ -289,6 +302,16 @@ async function main(): Promise<void> {
     requireEmpty(state);
     const changes = await call(client, "plasticity_changes_since", { snapshotId: snapshot.snapshotId });
     requireCondition(!hasSceneContentChanges(changes.diff), "Scene content differs from the initial empty snapshot after cleanup");
+    if (options.case.startsWith("imprint-curve-normal")) {
+      const history = await call(client, "plasticity_construction_history", { limit: 100 });
+      const expected = 2 * (source.undoDepth - initial.undoDepth) + 4;
+      const imprints = history.entries.filter((entry: any) => entry.operation === "imprint-curves-on-body");
+      requireCondition(history.total === expected && history.entries.length === expected && history.entries.every((entry: any) => entry.status === "completed"), "Durable imprint history is incomplete");
+      requireCondition(imprints.length === 1 && imprints[0].input.projectionMethod === "normal" && imprints[0].input.direction == null, "Durable imprint projection method mismatch");
+      const journal = await call(client, "plasticity_construction_journal", {});
+      requireCondition(journal.durableSyncStatus === "in-sync", "Durable imprint history is out of sync");
+      evidence.durableHistory = { events: history.total, projectionMethod: "normal", syncStatus: journal.durableSyncStatus };
+    }
     evidence.undoRedo = true;
     evidence.cleanup = { restoredEmptyDocument: true, sceneContentsRestored: true };
     evidence.completedAt = new Date().toISOString();
@@ -296,7 +319,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, evidence: join(output, "evidence.json"), geometry: evidence.geometry }));
   } catch (error) {
     evidence.error = (error instanceof Error ? error.message : String(error)).slice(0, 2_000);
-    if (client && initial && state && state.documentToken === initial.documentToken) {
+    if (!/timed out|timeout|uncertain/i.test(String(evidence.error)) && client && initial && state && state.documentToken === initial.documentToken) {
       try {
         const current = await call(client, "plasticity_status", {});
         if (current.documentToken === initial.documentToken && current.revision === state.revision && current.undoDepth > initial.undoDepth) {
@@ -314,8 +337,7 @@ async function main(): Promise<void> {
 }
 
 async function startMcp(storeRoot: string): Promise<Client> {
-  const env = Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof process.env[key] === "string" ? [[key, process.env[key]!]] : []));
-  const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: { ...env, PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" }, stderr: "pipe" });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: isolatedAcceptanceEnvironment(storeRoot, process.env), stderr: "pipe" });
   const client = new Client({ name: "plasticity-native-align-project-live", version: "1.0.0" });
   await client.connect(transport);
   return client;
