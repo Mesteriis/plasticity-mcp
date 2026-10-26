@@ -320,3 +320,8 @@ not accept rasterized HTML glyphs/full-window capture; item-transform measuremen
 Other command families/file serialization are not covered. External three-phase
 window review remains unaccepted on both versions because some captures show
 stale scene pixels.
+
+A separate manually focused 26.1.3 external-window review now passes creation,
+15 mm update and deletion glyph checks. Earlier stale captures remain failed.
+The equivalent focused 26.2.1 review and default full-window MCP capture remain
+outside acceptance.

@@ -65,7 +65,8 @@ It records the JPEG artifact hash and rejects a changed document/revision. A
 JPEG file is **not** an automatic glyph-pixel pass; manual review is mandatory.
 Default runs remain unattended DOM/layout checks. No args/`--help` remain inert.
 
-Manual three-phase review remains **unaccepted on both experimental copies**:
+The initial three-phase review failed on both experimental copies (retained as
+separate failing fixtures):
 
 | Version | Created | Model moved (expected 15 mm) | All dimensions deleted |
 | --- | --- | --- | --- |
@@ -81,5 +82,16 @@ retain the original native/layout exit code separately and fail overall window
 acceptance; original full-window MCP fixtures remain failed too. A real foreground
 window and repeatable fresh captures are still needed. No visibility emulation,
 security changes or replacement rasterization are used.
+
+After the user manually focused the experimental 26.1.3 viewport, a separate
+`html-window-review-focused` run passed all three manually inspected images:
+5.00/7.07/20.00/10.00 mm after creation, 15.00 mm after moving the second box,
+and no measurement labels/helper lines after deletion. The same captured JPEG
+bytes were displayed for review and saved; hashes match the fixture evidence.
+All thirteen native/DOM phases, exact names, source restoration and empty/idle
+cleanup also pass. This qualifies that foreground external-window workflow on
+26.1.3; it does not accept the default Chromium full-window MCP capture or
+background freshness. Earlier stale-window failures remain. The corresponding
+focused 26.2.1 review is still pending.
 
 Installed applications, app bundles and security settings were unchanged.

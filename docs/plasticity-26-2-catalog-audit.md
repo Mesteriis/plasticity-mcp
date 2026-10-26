@@ -943,3 +943,17 @@ See [the full contract and review table](html-measurement-labels.md).
 1482 root tests and typecheck pass. Accepted tool counts are 303/371 on 26.2.1
 and 267/371 on 26.1.3; the scale call adds legacy acceptance for that fixture. Failed external window review adds one failed fixture on
 each version; existing failures remain. Both CAD scenes finish empty and idle.
+
+
+## Foreground external-window review on 26.1.3
+
+After explicit manual viewport focus, a separate focused fixture passes all three
+real CUA window images: four original labels, the 10→15 mm update, then no labels
+or helpers after deletion. The exact saved JPEG bytes were visually reviewed and
+hashes match the native/DOM evidence. All thirteen native/DOM phases, names,
+source snapshot restoration and empty/idle cleanup pass. The earlier failed
+window fixture is preserved; this does not accept background freshness or the
+default full-window MCP capture. Focused 26.2.1 review remains pending.
+
+No code changed in this continuation. Catalog counts/references and diff checks
+pass; tool coverage stays 303/371 modern and 267/371 legacy.
