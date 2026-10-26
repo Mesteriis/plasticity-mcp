@@ -47,6 +47,7 @@
     "accept:workbench-creality-mcp": "node workbench/scripts/verify-workbench-creality-mcp-live.ts",
     "accept:workbench-slicer-mcp": "node workbench/scripts/verify-workbench-creality-mcp-live.ts",
     "accept:native-obj-export": "node scripts/verify-native-obj-export-live.ts",
+    "accept:native-cad-download": "node scripts/verify-native-cad-download-live.ts",
     "accept:native-parasolid": "node scripts/verify-native-parasolid-live.ts",
     "accept:native-reference-mesh": "node scripts/verify-native-reference-mesh-live.ts",
     "accept:reference-mesh-download": "node scripts/verify-reference-mesh-download-live.ts",

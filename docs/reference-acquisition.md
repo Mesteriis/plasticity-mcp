@@ -169,3 +169,11 @@ npm run accept:parasolid-reference-download -- <target-id> <https-parasolid-or-z
 
 The acceptance undoes only the import it successfully completed at the same
 revision; it leaves an uncertain or subsequently edited scene untouched.
+
+The guarded dual-version [pinned direct-file qualification](network-cad-qualification.md)
+now covers STEP and text Parasolid through production stdio on experimental
+26.2.1 and 26.1.3. Run `npm run accept:native-cad-download -- --help` for explicit
+fixture/target/disposable guards. It checks native readback, immutable provenance,
+Undo/Redo, restart durability and source restoration, then removes its known
+private CAD artifact. Legacy conservative bounds and source/license limitations
+are recorded separately from independent Parasolid box proof.

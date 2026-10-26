@@ -1018,3 +1018,30 @@ Coverage is 309/371 on 26.2.1 and 273/371 on 26.1.3. 1490 root tests, typecheck,
 catalog consistency and diff checks pass. Scenes finish empty and idle. Rendered
 pixels, physical accuracy, arbitrary transport failures, asset discovery and
 STEP/Parasolid network imports remain outside this slice.
+
+## Pinned HTTPS STEP and Parasolid native B-Rep
+
+PR #27 and #28 were merged into main. This continuation starts at
+`1e775ead2b86f292ed0f86848b5ce35d3da15748` and adds a guarded production stdio
+verifier for two immutable public direct-file CAD inputs. Both STEP and text
+Parasolid pass on experimental 26.2.1 and 26.1.3, including hash/size/private-byte
+identity, native Solid validity/mass/topology, historical provenance list/get,
+stable IDs and numerical geometry across Undo/Redo and MCP restart, complete
+source restoration and four completed durable events with in-sync status.
+
+[The pinned sources, numeric gates and scope](network-cad-qualification.md)
+distinguish observed STEP properties from independent Parasolid planar-box proof.
+Legacy STEP native-box bounds remain conservative and are not replaced by modern
+native-extrema bounds. Native integration roundoff is checked with explicit
+absolute tolerances; identity/topology counts and method tags remain exact.
+An in-process snapshot is checked before restart; the retained full source-state
+baseline is checked afterwards. Downloaded CAD bytes are removed only after
+successful cleanup and hash verification. All test stores are isolated; unknown
+timeout/disconnect outcomes stop recovery mutations.
+
+There is no production adapter change in this continuation. Coverage becomes
+311/371 modern and 275/371 legacy. Existing failed fixtures remain. 1494 root
+tests, typecheck, matrix consistency and diff checks pass. Both scenes finish
+empty and idle; installed apps/settings/security are unchanged. Direct-file
+acceptance does not qualify ZIPs, binary Parasolid, arbitrary assemblies,
+asset discovery, rendering or manufacturing accuracy.
