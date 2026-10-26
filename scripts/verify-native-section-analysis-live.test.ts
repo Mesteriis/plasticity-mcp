@@ -13,3 +13,9 @@ test("section-analysis acceptance defaults to help and requires explicit live gu
     help: false, target: "window-1", allowDisposableMutations: true, output: "/tmp/out",
   });
 });
+
+
+test("section WebGL viewport capture requires an explicit flag", () => {
+  assert.equal(parseNativeSectionAnalysisAcceptanceArgs(["--help"]).viewportCapture, undefined);
+  assert.equal(parseNativeSectionAnalysisAcceptanceArgs(["--help", "--viewport-capture"]).viewportCapture, true);
+});

@@ -18,6 +18,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export interface NativeGroupAcceptanceOptions {
   help: boolean;
   nativeStateOnly?: boolean;
+  viewportCapture?: boolean;
   target?: string;
   allowDisposableMutations: boolean;
   output?: string;
@@ -32,6 +33,7 @@ export function parseNativeGroupAcceptanceArgs(argv: string[]): NativeGroupAccep
     const argument = argv[index];
     if (argument === "--help") options.help = true;
     else if (argument === "--native-state-only") options.nativeStateOnly = true;
+    else if (argument === "--viewport-capture") options.viewportCapture = true;
     else if (argument === "--allow-disposable-mutations") options.allowDisposableMutations = true;
     else if (argument === "--target") {
       const value = argv[++index];
@@ -43,6 +45,7 @@ export function parseNativeGroupAcceptanceArgs(argv: string[]): NativeGroupAccep
       options.output = value;
     } else throw new Error(`Unknown argument: ${String(argument)}`);
   }
+  if (options.nativeStateOnly && options.viewportCapture) throw new Error("Viewport capture and native-state-only scopes are mutually exclusive");
   if (options.help) return options;
   if (!options.target) throw new Error("Live native-group acceptance requires --target with an explicit window ID");
   if (!options.allowDisposableMutations) throw new Error("Live native-group acceptance requires --allow-disposable-mutations");
@@ -61,7 +64,8 @@ group state plus planar, cylindrical, vertex, and linear-edge placement, and wri
 only sanitized evidence to a new directory.
 
 --native-state-only checks native data/history without screenshot or pixel assertions.
-The default retains the full viewport checks; this option does not qualify rendering.`;
+The default retains the full window checks; this option does not qualify rendering.
+--viewport-capture checks fresh native WebGL pixels without HTML panels/labels.`;
 
 async function main(): Promise<void> {
   const options = parseNativeGroupAcceptanceArgs(process.argv.slice(2));
@@ -73,7 +77,7 @@ async function main(): Promise<void> {
     startedAt: new Date().toISOString(),
     targetId: options.target!,
     workbenchUsed: false,
-    validationScope: options.nativeStateOnly ? "native-state-only" : "native-and-rendered-viewport",
+    validationScope: options.nativeStateOnly ? "native-state-only" : options.viewportCapture ? "native-and-webgl-canvas" : "native-and-rendered-window",
   };
   let live: LiveMcp | undefined;
   let initialState: any;
@@ -234,28 +238,30 @@ async function main(): Promise<void> {
     // Node flags alone do not prove a viewport redraw. The default scope therefore
     // also checks each visibility step against the rendered frame.
     if (!options.nativeStateOnly) await call(live.client, "plasticity_set_view", { view: "isometric", fit: true });
-    const shownFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-shown.png"));
+    const frameProvenance: Array<Record<string, unknown>> = [];
+    const capture = (path: string) => viewportFrame(live!.client, path, options.viewportCapture, frameProvenance);
+    const shownFrame = options.nativeStateOnly ? null : await capture(join(output, "visibility-shown.png"));
     priorDepth = state.undoDepth;
     state = await call(live.client, "plasticity_set_visibility", {
       bodyIds: [housingBodyId], visible: false, intent: "Verify exact native body visibility", revision: state.revision,
     });
     requireHistoryStep(state, priorDepth, "Hide housing body");
     requireCondition(bodyById(state, housingBodyId).visible === false, "Housing body remains visible");
-    const hiddenFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-hidden.png"));
+    const hiddenFrame = options.nativeStateOnly ? null : await capture(join(output, "visibility-hidden.png"));
     // The outliner row alone changes well under 0.1% of the window when the viewport stays stale.
     const hiddenDifference = shownFrame && hiddenFrame ? comparePngPixels(shownFrame, hiddenFrame) : null;
     if (hiddenDifference) requireCondition(hiddenDifference.changedPixelRatio >= 0.002, `Viewport still renders the hidden housing body (changed ${hiddenDifference.changedPixelRatio})`);
     state = await call(live.client, "plasticity_undo", { intent: "Verify visibility Undo", revision: state.revision });
     requireCondition(bodyById(state, housingBodyId).visible === true, "Visibility Undo did not show the housing body");
-    const undoFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-undo.png"));
+    const undoFrame = options.nativeStateOnly ? null : await capture(join(output, "visibility-undo.png"));
     const undoDifference = shownFrame && undoFrame ? comparePngPixels(shownFrame, undoFrame) : null;
     if (undoDifference) requireCondition(undoDifference.changedPixelRatio <= 0.0001, `Visibility Undo did not restore the shown viewport (changed ${undoDifference.changedPixelRatio})`);
     state = await call(live.client, "plasticity_redo", { intent: "Verify visibility Redo", revision: state.revision });
     requireCondition(bodyById(state, housingBodyId).visible === false, "Visibility Redo did not hide the housing body");
-    const redoFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-redo.png"));
+    const redoFrame = options.nativeStateOnly ? null : await capture(join(output, "visibility-redo.png"));
     const redoDifference = hiddenFrame && redoFrame ? comparePngPixels(hiddenFrame, redoFrame) : null;
     if (redoDifference) requireCondition(redoDifference.changedPixelRatio <= 0.0001, `Visibility Redo did not restore the hidden viewport (changed ${redoDifference.changedPixelRatio})`);
-    if (!options.nativeStateOnly) evidence.visibilityFrames = { hidden: hiddenDifference, undo: undoDifference, redo: redoDifference };
+    if (!options.nativeStateOnly) evidence.visibilityFrames = { hidden: hiddenDifference, undo: undoDifference, redo: redoDifference, captures: frameProvenance };
     const listedGroups = await call(live.client, "plasticity_list_groups", {});
     requireCondition(listedGroups.revision === state.revision && listedGroups.activeGroupId === state.activeGroupId && JSON.stringify(listedGroups.groups) === JSON.stringify(state.groups), "Group listing differs from native status");
     evidence.groupListing = listedGroups;
@@ -452,7 +458,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && initialState && !evidence.cleanup) evidence.cleanup = await recover(live.client, initialState).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
+    if (!/timed out|timeout|uncertain/i.test(String(evidence.failure)) && live && initialState && !evidence.cleanup) evidence.cleanup = await recover(live.client, initialState).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
     await writeExclusive(join(output, "failure.json"), sanitizeEvidence(evidence)).catch(() => {});
     throw error;
   } finally {
@@ -476,10 +482,12 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
-async function viewportFrame(client: Client, path: string): Promise<Buffer> {
+async function viewportFrame(client: Client, path: string, viewportCapture?: boolean, provenance?: Array<Record<string, unknown>>): Promise<Buffer> {
   // The viewport redraws on the next animation frame after a scene change.
   await new Promise((resolve) => setTimeout(resolve, 500));
-  await call(client, "plasticity_screenshot", { path });
+  const result = await call(client, "plasticity_screenshot", { path, ...(viewportCapture ? { captureMode: "viewport" } : {}) });
+  if (viewportCapture) requireCondition(result.captureMode === "viewport" && result.freshFrame === true && typeof result.rendererHidden === "boolean", "Viewport screenshot freshness provenance missing");
+  provenance?.push({ captureMode: result.captureMode ?? "window", freshFrame: result.freshFrame ?? null, rendererHidden: result.rendererHidden ?? null });
   return await readFile(path);
 }
 

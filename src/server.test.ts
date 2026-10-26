@@ -972,6 +972,9 @@ test("MCP initializes, lists tools, and validates tool input", async () => {
     arguments: { targetId: 7, curveIds: [11], direction: [0, 0, 0], revision: "r1" },
   });
   assert.equal(invalidImprint.isError, true);
+  const invalidCaptureMode = await client.callTool({ name: "plasticity_screenshot", arguments: { path: "test.png", captureMode: "unknown" } });
+  assert.equal(invalidCaptureMode.isError, true);
+  assert.match(JSON.stringify(invalidCaptureMode.content), /captureMode/);
   for (const parameters of [{}, { projectionMethod: "vector" }, { projectionMethod: "normal", direction: [0,0,-1] }, { projectionMethod: "invalid" }]) {
     const rejected = await client.callTool({ name: "plasticity_imprint_curves_on_body", arguments: { targetId: 7, curveIds: [11], revision: "r1", ...parameters } });
     assert.equal(rejected.isError, true);

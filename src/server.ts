@@ -3604,8 +3604,8 @@ function createServerWithCatalog(
 
   tool("plasticity_set_view", "Set a named viewport orientation and optionally fit all geometry.", z.object({ view: z.enum(["front", "back", "left", "right", "top", "bottom", "isometric"]), fit: z.boolean().default(false) }), async ({ view, fit }) =>
     await session.get().setView(view, fit));
-  tool("plasticity_screenshot", "Save a PNG screenshot of the visible Plasticity renderer viewport to a new file without overwriting. Refuses hidden windows to avoid stale frames.", z.object({ path: z.string().min(1) }), async ({ path }) =>
-    await session.get().screenshot(path), false, { destructiveHint: false });
+  tool("plasticity_screenshot", "Save a PNG to a new file without overwriting. captureMode=window (default) captures the visible full renderer with HTML panels/labels and rejects hidden windows. captureMode=viewport explicitly renders and captures the native WebGL canvas, including when occluded; requires verified frame advancement and a live context. Viewport mode excludes HTML panels and labels and reports rendererHidden/freshFrame provenance.", z.object({ path: z.string().min(1), captureMode: z.enum(["window", "viewport"]).default("window") }), async ({ path, captureMode }) =>
+    await session.get().screenshot(path, captureMode), false, { destructiveHint: false });
   tool("plasticity_save_copy", "Save the current document to a new .plasticity file without overwriting.", z.object({ path: z.string().min(1) }), async ({ path }) =>
     await session.get().saveCopy(path), false, { destructiveHint: false });
   tool("plasticity_open_document", "Open a .plasticity document after saving the current scene as a new backup file. If opening fails after the save, the current document remains associated with the backup.", z.object({ path: z.string().min(1), backupPath: z.string().min(1), intent, revision }), async ({ path, backupPath, intent: purpose, revision: current }) =>

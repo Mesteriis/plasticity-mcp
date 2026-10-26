@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #23
-(`119998b053adf61bed934fc8e3aff3bc29727852`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #24
+(`51931a5182c93c0bb045b4711ec7db999fdfc2a0`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,10 +29,10 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 143 | 151 |
+| Completed passing fixtures | 145 | 153 |
 | Failing or blocked fixtures | 12 | 10 |
-| Tools with success in an application-connected passing fixture | 260 | 302 |
-| Tools attempted only in unaccepted fixtures | 3 | 1 |
+| Tools with success in an application-connected passing fixture | 261 | 303 |
+| Tools attempted only in unaccepted fixtures | 2 | 0 |
 | Tools without a recorded application-connected live call | 108 | 68 |
 
 The different counts reflect the executed scenarios, not a claim that the
@@ -814,3 +814,47 @@ Validation: 1468 root tests, 23 Workbench web tests and 90 Workbench server test
 pass; both typechecks pass,
 and Workbench builds. Its existing advisory about chunks larger than 500 kB
 remains. Catalog consistency and `git diff --check` pass.
+
+
+## Verified native viewport capture
+
+`plasticity_screenshot` now has explicit `captureMode: viewport`: it uses the
+existing native render handler and immediately encodes the WebGL canvas only
+after verified draw-counter/timestamp advancement, a cleared dirty flag and a
+live context. Busy, missing, ambiguous, stale or lost-context rendering rejects.
+PNG dimensions must match the native canvas; existing no-overwrite behavior
+remains. Freshness, hidden-document provenance and dimensions are returned.
+
+Default `window` behavior retains its visibility guard and full HTML content.
+There is no automatic fallback, visibility emulation, prototype replacement or
+background-throttling change. Viewport mode excludes HTML labels/panels and CSS
+backgrounds, preserving canvas alpha; it is not proof of OS window visibility.
+See [the capture contract and commands](viewport-screenshots.md).
+
+The `native-viewport` group and section variants pass **2/2 on each copy**:
+
+| Rendered assertion | 26.1.3 | 26.2.1 |
+| --- | ---: | ---: |
+| Group hide changed-pixel ratio | 0.032557511610325086 | 0.032557511610325086 |
+| Group Undo/Redo restoration differences | 0 / 0 | 0 / 0 |
+| Section changed-pixel ratio | 0.14702948482557512 | 0.14702235662598553 |
+| Section removal restoration difference | 0 | 0 |
+
+Original change/restoration thresholds were not relaxed. Native state/history,
+source snapshot restoration and empty-scene cleanup also pass. Each captured
+image reports verified freshness and `rendererHidden=true`; representative PNGs
+were visually inspected in addition to decoded pixel comparisons. Final live
+capture with the context-loss guard left CAD revision/Undo/Redo unchanged on
+both versions. The test stores are isolated, and unknown timeout outcomes stop
+recovery mutations.
+
+The original full-window fixtures remain failed; new native-viewport fixture
+IDs carry this separate scope. HTML annotation/manual/window checks, legacy
+strict STEP/channel bounds and known vector-imprint/fractional-Helix inputs
+remain outside acceptance. Coverage is 303/371 on 26.2.1 and 261/371 on 26.1.3;
+no failed fixture contributes accepted tool coverage. Both scenes finish empty
+and idle; installed application and security settings were unchanged.
+
+Validation: 1475 root tests, 23 Workbench web tests and 90 Workbench server tests
+pass. Both typechecks and Workbench build pass; the existing >500 kB advisory
+remains. Matrix consistency and `git diff --check` pass.

@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 
+import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
 import { nativeFunction } from "./native-function.ts";
 import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RuntimeState } from "./runtime.ts";
 import { add, ConstructionGeometry, cross, dot, frameFromOriginNormalX, localPointToWorld, normalize, scale, subtract } from "./construction.ts";
@@ -9631,23 +9632,37 @@ export class PlasticityOperations {
     return await this.state(LONG_NATIVE_IMPORT_TIMEOUT_MS);
   }
 
-  async screenshot(outputPath: string): Promise<{ path: string; bytes: number }> {
+  async screenshot(outputPath: string, captureMode: "window" | "viewport" = "window"): Promise<{ path: string; bytes: number; captureMode?: "viewport"; freshFrame?: boolean; rendererHidden?: boolean; width?: number; height?: number }> {
+    if (captureMode !== "window" && captureMode !== "viewport") throw new Error("Unsupported screenshot capture mode");
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".png") throw new Error("Screenshot output must end in .png");
     await assertAbsent(output);
     await mkdir(dirname(output), { recursive: true });
-    await this.runtime.cdp("Page.bringToFront");
-    const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
-    if (hidden) throw new Error("Plasticity renderer is hidden; activate Plasticity and retry the screenshot");
-    const frame = await this.runtime.captureScreenshot();
+    let viewport: { data: string; width: number; height: number; rendererHidden: boolean; freshFrame: boolean } | undefined;
+    let frame: string;
+    if (captureMode === "viewport") {
+      viewport = await this.runtime.read(NATIVE_VIEWPORT_CAPTURE);
+      if (!viewport || viewport.freshFrame !== true || typeof viewport.data !== "string" || typeof viewport.rendererHidden !== "boolean") {
+        throw new Error("Native viewport freshness verification failed");
+      }
+      frame = viewport.data;
+    } else {
+      await this.runtime.cdp("Page.bringToFront");
+      const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
+      if (hidden) throw new Error("Plasticity renderer is hidden; activate Plasticity and uncover its window, or explicitly use captureMode=viewport for a fresh WebGL frame without HTML overlays");
+      frame = await this.runtime.captureScreenshot();
+    }
     const data = Buffer.from(frame, "base64");
     const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
     if (data.length < 24 || !data.subarray(0, 8).equals(pngSignature) || data.toString("ascii", 12, 16) !== "IHDR" ||
       data.readUInt32BE(16) < 1 || data.readUInt32BE(20) < 1) {
       throw new Error("Plasticity returned an invalid PNG screencast frame");
     }
+    if (viewport && (data.readUInt32BE(16) !== viewport.width || data.readUInt32BE(20) !== viewport.height)) {
+      throw new Error("Native viewport PNG dimensions do not match the rendered canvas");
+    }
     await writeFile(output, data, { flag: "wx" });
-    return { path: output, bytes: data.length };
+    return { path: output, bytes: data.length, ...(viewport ? { captureMode: "viewport" as const, freshFrame: true, rendererHidden: viewport.rendererHidden, width: viewport.width, height: viewport.height } : {}) };
   }
 
   async setView(view: "front" | "back" | "left" | "right" | "top" | "bottom" | "isometric", fit: boolean): Promise<unknown> {
