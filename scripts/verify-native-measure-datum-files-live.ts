@@ -13,7 +13,7 @@ import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-stren
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const MEASURE_FILE_CASES = ["bounds", "point-distance", "point-edge-interior", "point-edge-clamped", "linear-edges", "datum-refresh", "construction-plane", "step-provenance", "save-open"] as const;
+export const MEASURE_FILE_CASES = ["bounds", "point-distance", "point-edge-interior", "point-edge-clamped", "linear-edges", "datum-refresh", "construction-plane", "saved-plane-frames", "step-provenance", "save-open"] as const;
 type MeasureFileCase = typeof MEASURE_FILE_CASES[number];
 
 interface Options { case: MeasureFileCase; help: boolean; target?: string; output?: string; allowDisposableMutations: boolean }
@@ -196,6 +196,88 @@ async function main(): Promise<void> {
       const after = await call(client, "plasticity_list_construction_geometry", {});
       requireCondition(after.activePlaneId === before.activePlaneId && JSON.stringify(after.planes.map((plane: any) => plane.id).sort()) === JSON.stringify(before.planes.map((plane: any) => plane.id).sort()), "Construction state was not restored");
       evidence.planeLifecycle = { nativeReadback: true, activePlaneVerified: true, localCoordinatesVerified: true, restoredInitialPlanes: true };
+    } else if (options.case === "saved-plane-frames") {
+      const before = await call(client, "plasticity_list_construction_geometry", {});
+      requireCondition(before.activePlaneId && before.planes.every((plane: any) => plane.source === "standard"), "Saved-plane acceptance requires only standard planes and a registered initial workplane");
+      const currentPlane = async (id: string): Promise<any> => {
+        const listed = await call(client!, "plasticity_list_construction_geometry", {});
+        const plane = listed.planes.find((value: any) => value.id === id);
+        requireCondition(plane, "Current plane reference missing"); return plane;
+      };
+      const diagnosis = await call(client, "plasticity_diagnose", {});
+      requireCondition(diagnosis.windows.some((window: any) => window.id === options.target), "Diagnosis omitted the selected window");
+      const bindings: string[] = []; let offset = 0; let matching = 0;
+      do {
+        const page = await call(client, "plasticity_capabilities", { query: "ConstructionPlane", offset, limit: 2 });
+        requireCondition(page.offset === offset && page.bindings.every((name: string) => name.toLowerCase().includes("constructionplane")), "Native capability page/filter mismatch");
+        matching = page.matchingBindings; bindings.push(...page.bindings);
+        if (page.nextOffset === null) break;
+        requireCondition(page.nextOffset === offset + page.bindings.length && page.nextOffset > offset, "Capability pagination did not advance"); offset = page.nextOffset;
+      } while (offset <= 10000);
+      requireCondition(bindings.length === matching && new Set(bindings).size === matching && bindings.includes("ConstructionPlaneSnap"), "Native construction binding pagination is incomplete");
+      evidence.discovery = { selectedWindowPresent: true, matchingBindings: matching, completeFilteredPagination: true };
+      await mutate("plasticity_create_box", { originMm: [0,0,0], sizeMm: [10,20,30] });
+      const control = state.bodies[0];
+      const top = control.faces.find((face: any) => face.normal?.[2] > 0.99);
+      requireCondition(top, "Source top face missing");
+      const normal = [0, -Math.SQRT1_2, Math.SQRT1_2];
+      const definitions: Array<{ label: string; definition: any; origin: number[]; normal: number[]; x?: number[] }> = [
+        { label: "explicit", definition: { type: "explicit", originMm: [2,3,4], normal, xDirection: [1,0,0] }, origin: [2,3,4], normal, x: [1,0,0] },
+        { label: "face-offset", definition: { type: "planar-face", bodyId: control.id, faceId: top.id, offsetMm: 2 }, origin: [5,10,32], normal: [0,0,1] },
+      ];
+      definitions.push({ label: "three-points", definition: { type: "three-points" }, origin: [2,3,4], normal, x: [1,0,0] });
+      definitions.push({ label: "offset", definition: { type: "offset", planeId: "standard:top", offsetMm: 7 }, origin: [0,0,7], normal: [0,0,1] });
+      definitions.push({ label: "rotated", definition: { type: "rotated", planeId: "standard:top", angleDegrees: 90 }, origin: [0,0,0], normal: [0,-1,0] });
+      const results = [];
+      for (const item of definitions) {
+        if (item.label === "three-points") {
+          const points = [];
+          for (const pointMm of [[2,3,4],[12,3,4],[2,13,14]]) points.push(await call(client, "plasticity_define_datum_point", { definition: { type: "coordinates", pointMm }, revision: state.revision }));
+          item.definition = { type: "three-points", firstId: points[0].id, secondId: points[1].id, thirdId: points[2].id };
+        } else if (item.label === "rotated") {
+          const axis = await call(client, "plasticity_define_datum_axis", { definition: { type: "origin-direction", originMm: [0,0,0], direction: [1,0,0] }, revision: state.revision });
+          item.definition.axisId = axis.id;
+        }
+        const depth = state.undoDepth;
+        const created = await call(client, "plasticity_create_construction_plane", { definition: item.definition, name: "Acceptance " + item.label, revision: state.revision }); await fresh();
+        requireCondition(state.undoDepth === depth + 1, "Plane creation did not add one history step");
+        const verify = async () => {
+          const plane = await currentPlane(created.id);
+          vectorNear(plane.originMm, item.origin, 0.00001, "saved origin"); vectorNear(plane.normal, item.normal, 1e-8, "saved normal");
+          if (item.x) vectorNear(plane.xDirection, item.x, 1e-8, "saved X direction");
+          return plane;
+        };
+        await verify(); await mutate("plasticity_undo", {});
+        requireCondition(!state.construction.planes.some((plane: any) => plane.id === created.id), "Plane creation Undo retained its plane");
+        await mutate("plasticity_redo", {}); const plane = await verify();
+        state = await call(client, "plasticity_set_workplane", { plane: ref(plane) });
+        requireCondition(state.construction.activePlaneId === created.id && state.undoDepth === depth + 1, "Workplane activation/history mismatch");
+        const active = await currentPlane(created.id);
+        await mutate("plasticity_create_polyline", { pointsMm: [[0,0],[4,0],[4,6],[0,6]], closed: true, plane: ref(active) });
+        const wire = state.bodies.find((body: any) => body.type === "Wire");
+        requireCondition(wire && state.bodies.length === 2 && state.regions.length === 1, "Plane-local Wire/Region missing");
+        const corners = [[0,0],[4,0],[4,6],[0,6]].map(([u,v]) => item.origin.map((value, i) => value + u! * active.xDirection[i] + v! * active.yDirection[i]));
+        vectorNear(wire.boundsMm.min, [0,1,2].map(i => Math.min(...corners.map(corner => corner[i]!))), 0.00001, "plane-local minimum");
+        vectorNear(wire.boundsMm.max, [0,1,2].map(i => Math.max(...corners.map(corner => corner[i]!))), 0.00001, "plane-local maximum");
+        await mutate("plasticity_undo", {}); requireCondition(state.bodies.length === 1 && state.regions.length === 0, "Local profile Undo failed");
+        await mutate("plasticity_redo", {}); requireCondition(state.bodies.some((body: any) => body.id === wire.id), "Local profile Redo changed ID");
+        await mutate("plasticity_undo", {});
+        state = await call(client, "plasticity_set_workplane", { plane: ref(await currentPlane(before.activePlaneId)) });
+        const removalDepth = state.undoDepth;
+        state = await call(client, "plasticity_remove_construction_plane", { plane: ref(await currentPlane(created.id)) });
+        requireCondition(state.undoDepth === removalDepth + 1 && !state.construction.planes.some((plane: any) => plane.id === created.id), "Saved plane removal/history mismatch");
+        await mutate("plasticity_undo", {}); await verify(); await mutate("plasticity_redo", {});
+        requireCondition(!state.construction.planes.some((plane: any) => plane.id === created.id), "Plane removal Redo failed");
+        requireCondition(JSON.stringify(state.bodies[0]) === JSON.stringify(control), "Plane workflow changed the control body");
+        results.push({ definition: item.label, originMm: item.origin, normal: item.normal, createRemoveUndoRedo: true, activePlaneVerified: true, localProfileUndoRedo: true });
+      }
+      const rejectedBefore = state;
+      await expectRejection("plasticity_remove_construction_plane", { plane: ref(await currentPlane("standard:top")) }, /[Ss]tandard.*cannot be removed/);
+      await fresh(); requireCondition(state.revision === rejectedBefore.revision && state.undoDepth === rejectedBefore.undoDepth, "Standard-plane rejection changed state");
+      while (state.undoDepth > initial.undoDepth) await mutate("plasticity_undo", {});
+      const after = await call(client, "plasticity_list_construction_geometry", {});
+      requireCondition(after.activePlaneId === before.activePlaneId && JSON.stringify(state.construction.planes) === JSON.stringify(initial.construction.planes), "Saved-plane cleanup changed initial planes/workplane");
+      evidence.planeFrames = results;
     } else if (options.case === "step-provenance") {
       const path = join(output, "source.step");
       await mutate("plasticity_create_box", { originMm: [1, 2, 3], sizeMm: [10, 20, 30] });

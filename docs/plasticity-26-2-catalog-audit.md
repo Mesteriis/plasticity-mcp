@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #21
-(`7763a6628bff9a2edcafd4c3568b800da1e3a316`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #22
+(`96bcb4163e61a8fd6d8972a429500219911d176b`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 139 | 147 |
-| Failing or blocked fixtures | 12 | 10 |
-| Tools with success in an application-connected passing fixture | 247 | 289 |
-| Tools attempted only in unaccepted fixtures | 10 | 8 |
-| Tools without a recorded application-connected live call | 114 | 74 |
+| Completed passing fixtures | 140 | 148 |
+| Failing or blocked fixtures | 12 | 11 |
+| Tools with success in an application-connected passing fixture | 256 | 298 |
+| Tools attempted only in unaccepted fixtures | 4 | 3 |
+| Tools without a recorded application-connected live call | 111 | 70 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -701,3 +701,56 @@ Final automated checks: 1466 root tests and 90 Workbench tests pass; both
 typechecks and the Workbench build pass. The build retains its advisory warning
 about chunks larger than 500 kB. Both experimental documents were restored empty
 and idle; installed application and security settings were unchanged.
+
+
+## Native group hierarchy continuation
+
+The explicit `--native-state-only` variant of the existing group runner passes
+on both experimental versions. The default runner still requires its original
+PNG pixel-difference checks; its historical viewport failures are retained under
+the original fixture IDs. Native visibility flags are not rendered-pixel proof.
+No production adapter change was needed in this continuation.
+
+```sh
+npm run accept:groups -- --target ID --allow-disposable-mutations \
+  --native-state-only --output NEW_DIRECTORY
+```
+
+The native variant exercises group creation around bodies and linked instances,
+activation with subsequent geometry membership, nesting, rename, dissolve and
+promotion; exact node/face/edge selection; opposed planar-face alignment of a
+rigid body cluster; cylindrical, vertex and linear-edge alignment; visibility
+and lock flags. Applicable mutations check one history step and Undo/Redo.
+Body bounds, membership and active-group read-back are checked independently.
+The public group listing must match native status. Read-only diagnosis must
+include the selected window; filtered native binding pages must advance and
+cover all matching unique bindings. Only bounded discovery counts are kept in
+evidence, excluding the diagnostic endpoint/window dump.
+
+Both runs restore an empty document without groups or linked instances. Their
+stdio stores are scoped to new evidence directories. The explicit native-only
+scope is written to evidence; no screenshots are taken and rendering remains
+unaccepted. Accepted coverage is now 298/371 tools on 26.2.1 and 256/371 on 26.1.3.
+
+### Saved-plane fixture awaiting foreground preparation
+
+The new `saved-plane-frames` case in `accept:native-measure-datum-files` specifies
+five definitions: oblique explicit, planar face with offset, three points,
+standard-plane offset and axis rotation. Its intended gates include frame
+read-back, create/remove Undo/Redo, workplane activation, local rectangular
+profile bounds and profile Undo/Redo, protected standard-plane rejection, and
+restoration of the initial planes/workplane. Those gates are **not accepted**:
+the 26.2.1 attempt stopped at the first native plane creation because
+`document.hasFocus()` was false. No plane was created. Recovery restored the
+owned source box to the empty scene. The corresponding 26.1.3 case was not run.
+
+Window activation did not satisfy the guard, and the system UI click could not
+locate the window. The adapter's foreground requirement remains unchanged.
+Manual focus preparation is needed before retrying; the checked-in case is a
+guarded, currently unqualified fixture. Earlier saved-plane results do not
+replace this failed attempt. Circle-imprint, legacy strict bounds and remaining
+viewport/manual gaps also remain open.
+
+Automated checks: 1467 root tests and typecheck pass; catalog counts, fixture
+references and `git diff --check` pass. These checks do not accept the blocked
+plane fixture or qualify rendered visibility.

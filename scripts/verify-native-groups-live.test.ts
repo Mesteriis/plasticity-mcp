@@ -11,3 +11,9 @@ test("native-group acceptance requires an explicit disposable target and new out
     "--target", "window", "--allow-disposable-mutations", "--output", "/tmp/evidence",
   ]), { help: false, target: "window", allowDisposableMutations: true, output: "/tmp/evidence" });
 });
+
+
+test("native state scope is explicit and the default retains viewport checks", () => {
+  assert.equal(parseNativeGroupAcceptanceArgs(["--help"]).nativeStateOnly, undefined);
+  assert.equal(parseNativeGroupAcceptanceArgs(["--help", "--native-state-only"]).nativeStateOnly, true);
+});
