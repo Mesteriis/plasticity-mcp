@@ -2790,7 +2790,7 @@ test("lists and assigns native Plasticity appearance materials", async () => {
   assert.deepEqual(call?.bindings, []);
   assert.deepEqual(call?.values, [{ ids: [7], material: { materialId: 2 } }]);
   assert.match(call?.source ?? "", /selection\.selected\.removeAll\(\)/);
-  assert.match(call?.source ?? "", /nativeApi\.db\.nodes\.setMaterial\(nativeApi\.db\.nodes\.item2key\(view\), materialId\)/);
+  assert.match(call?.source ?? "", /nativeApi\.db\.nodes\.setMaterial\(nativeApi\.db\.nodes\.item2key\(view\), materialId === 0 \? undefined : materialId\)/);
 });
 
 test("creates bounded appearance materials through native document history", async () => {
@@ -6683,3 +6683,52 @@ function planeLocalOperations(bodies: RuntimeState["bodies"] = []): { operations
   } as unknown as PlasticityRuntime;
   return { operations: new PlasticityOperations(runtime, "session-1"), argumentsSeen: () => seen, sourceSeen: () => source };
 }
+
+test("appearance assignment clears with native undefined on legacy and modern editors, preserves other bodies and propagates native failures", async () => {
+  for (const modern of [false, true]) {
+    const assignments = new Map([[7, 2], [8, 2]]);
+    const seen: Array<number | undefined> = [];
+    let running = false; let failClear = false; let commands = 0;
+    const target = {}; const other = {};
+    const nodes = {
+      item2key(view: object) { assert.equal(view, target); return 7; },
+      setMaterial(key: number, id: number | undefined) {
+        assert.equal(running, true, "material edits must run inside the owned command");
+        assert.equal(key, 7); assert.notEqual(id, 0, "zero is a public sentinel, not a native material ID");
+        seen.push(id);
+        if (failClear && id === undefined) throw new Error("Native clear failed");
+        if (id === undefined) assignments.delete(key); else assignments.set(key, id);
+      },
+    };
+    const geometryModel = new Map([[17, { view: target }], [18, { view: other }]]);
+    const lookupStableId = (version: number) => version === 17 ? 7 : 8;
+    const materials = { has: (id: number) => id === 2 };
+    const editor = {
+      geo: modern ? { read: { geometryModel }, lookupStableId } : { geometryModel },
+      db: { nodes, materials, lookupStableId, commit() {} }, nodes, materials,
+      executor: { isBusy: false }, selection: { selected: { removeAll() {} } },
+      commands: { GroupSelectedCommand: class { remember = true; constructor(_editor: unknown) {} } },
+      async exec(command: { remember: boolean; execute(): Promise<void> }) {
+        commands += 1; assert.equal(command.remember, false); running = true;
+        try { await command.execute(); } finally { running = false; }
+      },
+    };
+    const state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "document", revision: "current", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], materials: [{ id: 2, name: "Fixture", colorHex: "#336699", roughness: 0.25, metalness: 0.4, opacity: 0.8 }], bodies: [7, 8].map(id => ({ id, versionId: id + 10, type: "Solid", name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [], materialId: 2 })) };
+    const runtime = {
+      async getState() { return state; },
+      async mutate(source: string, bindings: string[], values: unknown[]) {
+        assert.deepEqual(bindings, []);
+        return await Function(`return (${source})`)().apply(editor, values);
+      },
+    } as unknown as PlasticityRuntime;
+    const operations = new PlasticityOperations(runtime);
+    await operations.setAppearanceMaterial([7], { materialId: 0 }, state.revision);
+    assert.equal(assignments.has(7), false); assert.equal(assignments.get(8), 2);
+    await operations.setAppearanceMaterial([7], { materialId: 2 }, state.revision);
+    assert.equal(assignments.get(7), 2);
+    failClear = true;
+    await assert.rejects(operations.setAppearanceMaterial([7], { materialId: 0 }, state.revision), /Native clear failed/);
+    assert.equal(assignments.get(7), 2); assert.equal(assignments.get(8), 2);
+    assert.equal(commands, 3); assert.deepEqual(seen, [undefined, 2, undefined]);
+  }
+});

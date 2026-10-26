@@ -206,3 +206,51 @@ test("reads a body version's native topology once and reuses it until the body c
   assert.equal(reopened.bodies[0]?.materialId, 3);
   assert.equal(reopened.bodies[0]?.visible, false);
 });
+
+function appearanceStateHarness(entries: unknown[]) {
+  const point = (x: number, y: number, z: number) => ({ x, y, z });
+  const plane = { name: "Top", p: point(0, 0, 0), n: point(0, 0, 1), x: point(1, 0, 0), y: point(0, 1, 0) };
+  const appearance = { color: { getHexString: () => "336699" }, roughness: 0.25, metalness: 0.4, opacity: 0.8 };
+  const editor = {
+    planes: { snapshot: () => ({ ids: new Map(), planes: [] }) }, viewports: [],
+    geo: { geometryModel: new Map(), automatics: new Set() },
+    db: { version: 1, nodes: {}, empties: { snapshot: () => ({ empties: [], infos: [] }) }, groups: { snapshot: () => ({ groupIds: [], children: [], currentGroupId: 0 }) } },
+    materials: { list: () => entries, get(id: number) { assert.equal(id, 7); return appearance; } },
+    measurements: { snapshot: () => ({ repo: { measurements: [] } }) },
+    document: { uuid: "appearance-document" }, history: { undoStack: [], redoStack: [] },
+  };
+  const natives: Record<string, unknown> = { ConstructionPlaneDatabase: { Top: plane, Bottom: plane, Left: plane, Right: plane, Front: plane, Back: plane }, Vector3: class {}, Quaternion: class {} };
+  const client = {
+    async send(method: string, params: Record<string, unknown> = {}) {
+      assert.equal(method, "Runtime.callFunctionOn");
+      const args = (params.arguments as Array<{ objectId?: string }>).map(arg => natives[String(arg.objectId)]);
+      const execute = new Function(`return (${String(params.functionDeclaration)})`)();
+      return { result: { value: JSON.parse(JSON.stringify(execute.apply(editor, args))) } };
+    }, close() {},
+  } as unknown as CdpClient;
+  const Constructor = PlasticityRuntime as unknown as new (client: CdpClient, target: { id: string; title: string; webSocketDebuggerUrl: string }, editorId: string) => PlasticityRuntime;
+  const runtime = new Constructor(client, { id: "window-materials", title: "Appearance fixture", webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/materials" }, "editor");
+  const bindings = (runtime as unknown as { bindings: Map<string, string> }).bindings;
+  for (const name of Object.keys(natives)) bindings.set(name, name);
+  return { runtime, appearance };
+}
+
+test("native state reads legacy material pairs and modern material-info objects without changing their public contract", async () => {
+  const legacy = appearanceStateHarness([[7, { name: "Synthetic appearance" }]]);
+  const modern = appearanceStateHarness([{ id: 7, uuid: "synthetic", name: "Synthetic appearance", material: {} }]);
+  const first = await legacy.runtime.getState();
+  const second = await modern.runtime.getState();
+  assert.deepEqual(second.materials, [{ id: 7, name: "Synthetic appearance", colorHex: "#336699", roughness: 0.25, metalness: 0.4, opacity: 0.8 }]);
+  assert.deepEqual(first.materials, second.materials);
+  assert.equal(first.revision, second.revision);
+  modern.appearance.roughness = 0.5;
+  const changed = await modern.runtime.getState();
+  assert.equal(changed.materials?.[0]?.roughness, 0.5);
+  assert.notEqual(changed.revision, second.revision, "native appearance edits must invalidate the revision");
+});
+
+test("native material enumeration rejects malformed entries instead of silently omitting them", async () => {
+  for (const entry of [null, {}, { id: null }, { id: true }, { id: "" }, { id: "unexpected", name: "Invalid" }, [7, null]]) {
+    await assert.rejects(appearanceStateHarness([entry]).runtime.getState(), /Unsupported native appearance material entry/);
+  }
+});
