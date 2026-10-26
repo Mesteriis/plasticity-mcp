@@ -22,6 +22,7 @@ interface Options {
   sourceUrl?: string;
   sourcePageUrl?: string;
   license?: string;
+  expectedSha256?: string;
 }
 
 export type LocalReference3mfFixture = "millimeter" | "meter" | "two-meshes";
@@ -55,8 +56,13 @@ export function getReference3mfFixtureExpectation(fixture: Reference3mfFixture):
 
 export function validateReference3mfFixtureSource(fixture: Reference3mfFixture, sourceUrlValue: string, sourcePageUrl: string): void {
   const sourceUrl = new URL(sourceUrlValue);
-  requireCondition(sourceUrl.hostname === "raw.githubusercontent.com" && sourceUrl.pathname === `/Ghostkeeper/SlicerTestModels/master/3mf/${REFERENCE_3MF_FIXTURES[fixture].file}`, `Remote source URL must identify the selected ${fixture} acceptance fixture`);
-  requireCondition(sourcePageUrl === "https://github.com/Ghostkeeper/SlicerTestModels/tree/master/3mf", "Remote source page must identify the reviewed SlicerTestModels 3MF directory");
+  const parts = sourceUrl.pathname.split('/');
+  const ref = parts[3];
+  requireCondition(sourceUrl.origin === "https://raw.githubusercontent.com" && !sourceUrl.username && !sourceUrl.password && !sourceUrl.search && !sourceUrl.hash
+    && parts.length === 6 && parts[1] === "Ghostkeeper" && parts[2] === "SlicerTestModels" && parts[4] === "3mf"
+    && parts[5] === REFERENCE_3MF_FIXTURES[fixture].file && (ref === "master" || /^[a-f0-9]{40}$/.test(ref ?? "")),
+    `Remote source URL must identify the selected ${fixture} acceptance fixture`);
+  requireCondition(sourcePageUrl === `https://github.com/Ghostkeeper/SlicerTestModels/tree/${ref}/3mf`, "Remote source page must identify the reviewed SlicerTestModels 3MF directory at the same revision");
 }
 
 export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
@@ -65,7 +71,7 @@ export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
     const argument = argv[index];
     if (argument === "--help") options.help = true;
     else if (argument === "--allow-disposable-mutations") options.allowDisposableMutations = true;
-    else if (["--target", "--output", "--local-fixture", "--source-fixture", "--source-url", "--source-page-url", "--license"].includes(argument ?? "")) {
+    else if (["--target", "--output", "--local-fixture", "--source-fixture", "--source-url", "--source-page-url", "--license", "--expected-sha256"].includes(argument ?? "")) {
       const value = argv[++index];
       if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
       if (argument === "--target") options.target = value;
@@ -80,6 +86,10 @@ export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
       }
       else if (argument === "--source-url") options.sourceUrl = requireHttpsUrl(value, argument);
       else if (argument === "--source-page-url") options.sourcePageUrl = requireHttpsUrl(value, argument);
+      else if (argument === "--expected-sha256") {
+        if (!/^[a-f0-9]{64}$/.test(value)) throw new Error("--expected-sha256 must be 64 lowercase hex characters");
+        options.expectedSha256 = value;
+      }
       else options.license = value;
     } else throw new Error(`Unknown argument: ${String(argument)}`);
   }
@@ -89,6 +99,7 @@ export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
   if (!options.output) throw new Error("Live 3MF acceptance requires --output with a new directory");
   if (Boolean(options.sourceUrl) !== Boolean(options.sourcePageUrl)) throw new Error("Remote 3MF acceptance requires both --source-url and --source-page-url");
   if (options.sourceFixture && !options.sourceUrl) throw new Error("--source-fixture requires --source-url and --source-page-url");
+  if (options.expectedSha256 && !options.sourceUrl) throw new Error("--expected-sha256 requires a remote source");
   if (options.localFixture && options.sourceUrl) throw new Error("--local-fixture cannot be combined with a remote source");
   if (options.sourceUrl && !options.license) throw new Error("Remote 3MF acceptance requires --license with the reviewed asset terms");
   return options;
@@ -97,7 +108,7 @@ export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
 const HELP = `Usage:
   node scripts/verify-reference-3mf-import-live.ts --help
   node scripts/verify-reference-3mf-import-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
-  node scripts/verify-reference-3mf-import-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY --source-fixture unit-meters|multi-mesh --source-url HTTPS_3MF_URL --source-page-url HTTPS_SOURCE_PAGE --license REVIEWED_LICENSE
+  node scripts/verify-reference-3mf-import-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY --source-fixture unit-meters|multi-mesh --source-url HTTPS_3MF_URL --source-page-url HTTPS_SOURCE_PAGE --license REVIEWED_LICENSE [--expected-sha256 HASH]
 
 No-argument and --help modes do not connect to Plasticity. Live mode requires
 an explicit empty disposable document. By default, it creates a 4 mm unit-aware
@@ -106,7 +117,9 @@ are supplied, it downloads the selected remote 3MF through the public MCP
 instead. Remote fixtures exercise embedded-unit conversion (one mesh) or a
 multi-mesh model (two meshes). Each expected mesh is matched by topology and
 measured bounds independent of list ordering. Both modes test Undo/Redo,
-restore the initial scene, and write sanitized evidence.`;
+restore the initial scene, and write sanitized evidence. Remote URLs may use
+master or a full commit SHA with a matching source-page revision. An optional
+--expected-sha256 checks the acquired artifact against an independent preflight.`;
 
 async function main(): Promise<void> {
   const options = parseReference3mfAcceptanceArgs(process.argv.slice(2));
@@ -184,6 +197,11 @@ async function main(): Promise<void> {
       && listedImports.records[0].historical === true && listedImports.records[0].referenceMeshCount === meshes.length, "Isolated provenance listing did not match the import");
     importedRecordId = state.referenceRecordId;
     importedArtifactHash = state.referenceArtifactHash;
+    if (options.sourceUrl) {
+      requireCondition(state.acquisition?.bytes > 0 && state.acquisition.finalUrl === options.sourceUrl, "Unexpected remote acquisition size or final URL");
+      if (options.expectedSha256) requireCondition(importedArtifactHash === options.expectedSha256, "Downloaded 3MF artifact differs from independently reviewed SHA-256");
+      evidence.acquisition = { bytes: state.acquisition.bytes, finalUrl: withoutQuery(state.acquisition.finalUrl), artifactHash: importedArtifactHash, expectedSha256: options.expectedSha256 };
+    }
     if (!options.sourceUrl) requireCondition(importedArtifactHash === createHash("sha256").update(await readFile(sourcePath)).digest("hex"), "Provenance hash does not identify the original local 3MF bytes");
     const record = await call(client, "plasticity_get_cad_reference_import", { id: state.referenceRecordId });
     requireCondition(record.format === "3mf" && record.artifactHash === state.referenceArtifactHash, "Persistent 3MF import record does not match the imported artifact");

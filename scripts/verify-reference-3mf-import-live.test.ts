@@ -89,3 +89,22 @@ test("local 3MF fixtures encode embedded units and two independently placed mesh
   assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "unknown"]), /--local-fixture must/);
   assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "meter", "--source-url", "https://example.test/model.3mf", "--source-page-url", "https://example.test/models", "--license", "synthetic"]), /cannot be combined/);
 });
+
+test("remote 3MF fixture URLs accept full commit pins only with matching source pages", () => {
+  const ref = "e1bbc8eec047c2fb604b71f7e4793c3e0189fd6d";
+  const source = `https://raw.githubusercontent.com/Ghostkeeper/SlicerTestModels/${ref}/3mf/unit_meters.3mf`;
+  const page = `https://github.com/Ghostkeeper/SlicerTestModels/tree/${ref}/3mf`;
+  assert.doesNotThrow(() => validateReference3mfFixtureSource("unit-meters", source, page));
+  assert.throws(() => validateReference3mfFixtureSource("unit-meters", source, page.replace(ref, "master")), /same revision/);
+  for (const invalid of [source.replace(ref, "main"), source.replace("https:", "http:"), source.replace("https://", "https://user:pass@"), source + "?token=secret", source + "#fragment", source.replace(".com/", ".com:8443/")]) {
+    assert.throws(() => validateReference3mfFixtureSource("unit-meters", invalid, page), /selected unit-meters/);
+  }
+});
+
+test("remote expected artifact hashes require an explicit remote source and a full SHA-256", () => {
+  const hash = "a".repeat(64);
+  const remote = [...localArgs, "--source-url", "https://raw.githubusercontent.com/Ghostkeeper/SlicerTestModels/master/3mf/unit_meters.3mf", "--source-page-url", "https://github.com/Ghostkeeper/SlicerTestModels/tree/master/3mf", "--license", "CC0-1.0"];
+  assert.equal(parseReference3mfAcceptanceArgs([...remote, "--expected-sha256", hash]).expectedSha256, hash);
+  assert.throws(() => parseReference3mfAcceptanceArgs([...remote, "--expected-sha256", "short"]), /64 lowercase hex/);
+  assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--expected-sha256", hash]), /requires a remote source/);
+});
