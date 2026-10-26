@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #29
-(`9b38b3107008510fe1492154eff245298aa38cfc`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #30
+(`8a771f48a312cb0209ca17b697795078ecddfcb3`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 161 | 169 |
-| Failing or blocked fixtures | 13 | 13 |
-| Tools with success in an application-connected passing fixture | 278 | 314 |
+| Completed passing fixtures | 163 | 171 |
+| Failing or blocked fixtures | 13 | 14 |
+| Tools with success in an application-connected passing fixture | 285 | 321 |
 | Tools attempted only in unaccepted fixtures | 0 | 0 |
-| Tools without a recorded application-connected live call | 93 | 57 |
+| Tools without a recorded application-connected live call | 86 | 50 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -1069,3 +1069,33 @@ Coverage is 314/371 modern and 278/371 legacy, with three additional passing
 fixtures per version and the additional modern timeout retained. 1498 root
 tests, typecheck, catalog count/reference consistency and diff checks pass.
 The installed applications, settings and security protections are unchanged.
+
+## Synthetic material coupons and rectangular scenarios
+
+PR #30 is merged. A guarded production stdio verifier adds two passing cases
+per experimental version: immutable material-coupon registry and coupon-backed
+rectangular scenarios. [Synthetic inputs, numerical gates and limits](material-coupon-qualification.md)
+make clear that no physical tests were performed. Host records simulate the
+physical-coupon schema in isolated stores; no real material is qualified.
+
+Recording is idempotent; compatible partial records require explicit consolidation
+before exact-process matching. Five process changes yield no match. Malformed
+source hashes, duplicate IDs and conflicting properties are rejected; conflict
+records stay ambiguous. Independent design allowables remain separate from
+coupon peak strengths. Axial/bending stresses, displacement and utilizations,
+and every explicit size candidate are checked with independent arithmetic.
+Scenarios stay conditional and unbound. A test plan retains exact process identity
+and required axis confirmation. Registry and positive reports survive MCP restart
+with exact equality, while native scene/history remain unchanged.
+
+The first modern run expected conditional acceptance outside the cantilever
+deflection limit. That real refusal remains an unaccepted fixture. Corrected
+positive fixtures use a smaller load and heights within L/h ≥ 20. Explicit
+negative checks retain the deflection/slenderness guards; calculation algorithms
+and product limits are unchanged. No production adapter change was needed.
+
+Coverage is 321/371 on 26.2.1 and 285/371 on 26.1.3. 1502 root tests, typecheck,
+catalog count/reference consistency and diff checks pass. Both copies finish
+empty and idle. No installed application, settings or security configuration was
+changed. This slice does not qualify FEM, physical coupon authenticity, actual
+printed strength, manufacturing or rendered pixels.

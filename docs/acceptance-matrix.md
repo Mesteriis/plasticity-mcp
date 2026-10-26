@@ -355,3 +355,12 @@ Search and direct-link extraction are separate evidence scopes. The initial
 modern 120-second broad-search timeout remains unaccepted. Coverage becomes
 314/371 modern and 278/371 legacy; these host-tool cases do not qualify geometry,
 licensing, dimensions or arbitrary product-name search reliability.
+
+Synthetic material coupons: [registry and calculation cases](material-coupon-qualification.md)
+pass on each experimental version. They cover idempotent recording, exact-process
+matching, explicit consolidation, conflict rejection, conditional axial/cantilever
+formulae, discrete sizing and MCP restart persistence. Native scenes/history stay
+unchanged. Synthetic schema attestations are not real physical tests or material
+qualification. Initial modern out-of-method deflection refusal remains unaccepted;
+method limits are preserved and explicitly checked. Coverage becomes 321/371
+modern and 285/371 legacy. FEM and manufactured-part validation remain separate.
