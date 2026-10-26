@@ -120,6 +120,13 @@ The supplied clearances remain geometric test inputs, not qualified print fits,
 insert-retention ratings or snap-strength evidence. Per-version outcomes remain
 in the [catalog audit](plasticity-26-2-catalog-audit.md).
 
+Standalone custom rounded-thread fixtures subsequently failed on both versions:
+all six tested cases exceeded their declared native body-box envelope, and
+2.5-turn female Helices exceeded their requested length/end. Native Check,
+bounded-volume and sampled handedness checks passed, but those partial results
+do not accept the workflows. The same observations occur on 26.1.3; no adapter
+change or tolerance relaxation was made. See [standalone thread qualification](plasticity-26-2-catalog-audit.md#standalone-printed-thread-qualification).
+
 ## Initial live coverage
 
 The same checkout and production adapter were used against both disposable
