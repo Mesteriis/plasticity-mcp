@@ -10,6 +10,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
 
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
+
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export interface FastenerPocketAcceptanceOptions {
@@ -71,7 +75,7 @@ async function main(): Promise<void> {
     const windows = await call(live.client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     initialState = await call(live.client, "plasticity_connect", { targetId: options.target });
-    requireCondition(initialState.bodies.length === 0, "Refusing disposable mutations in a nonempty Plasticity document");
+    requireCondition(isDisposableEmptyDocument(initialState), "Refusing disposable mutations unless the document and Undo/Redo history are completely empty");
     evidence.initial = stateSummary(initialState);
     const snapshot = await call(live.client, "plasticity_capture_snapshot", { label: "fastener-pockets-live-initial-empty" });
 
@@ -482,9 +486,10 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && initialState && !evidence.cleanup) {
+    if (live && initialState && !evidence.cleanup && permitsNativeFailureRecovery(error)) {
       evidence.cleanup = await recover(live.client, initialState).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
     }
+    if (!permitsNativeFailureRecovery(error)) evidence.cleanup = { restoredEmptyDocument: false, reason: "uncertain-outcome-read-only-inspection-required" };
     await writeExclusive(join(output, "failure.json"), sanitizeEvidence(evidence)).catch(() => {});
     throw error;
   } finally {
@@ -852,7 +857,7 @@ async function startMcp(storeRoot: string): Promise<LiveMcp> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" },
+    env: isolatedAcceptanceEnvironment(storeRoot, process.env),
     stderr: "pipe",
   });
   const stderr: string[] = [];
@@ -911,9 +916,6 @@ function requireCondition(condition: unknown, message: string): asserts conditio
   if (!condition) throw new Error(message);
 }
 
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
-  return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : []));
-}
 
 function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 4000); }
 

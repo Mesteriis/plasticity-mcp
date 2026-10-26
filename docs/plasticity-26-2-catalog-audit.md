@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #32
-(`589a776d6080f4589ab1815b1d54ec3a8f3bc923`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #33
+(`b0b23fefbd3b29ada6889dd7ac10f4ee4e28f6f0`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 169 | 177 |
+| Completed passing fixtures | 175 | 177 |
 | Failing or blocked fixtures | 13 | 16 |
-| Tools with success in an application-connected passing fixture | 313 | 349 |
+| Tools with success in an application-connected passing fixture | 349 | 349 |
 | Tools attempted only in unaccepted fixtures | 0 | 0 |
-| Tools without a recorded application-connected live call | 58 | 22 |
+| Tools without a recorded application-connected live call | 22 | 22 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -1151,3 +1151,29 @@ Coverage becomes 349/371 modern and 313/371 legacy. 1511 root tests, typecheck,
 catalog count/reference consistency and diff checks pass. Native scenes remain
 empty/idle and unchanged by each fixture. This does not establish physical-test
 validity, a cohesive law, manufactured-part strength or FEM correctness.
+
+## Closing the legacy native-operation gap
+
+The existing fastener-pocket, single-fastener, fastener-group, plate and section
+strength suites now pass on both experimental versions, together with the existing
+nonparallel polygon-clearance suite. These are six complete guarded verifiers per
+version, not metadata probes. Native recipe geometry, measured topology/sections,
+formula results, bindings, stale reports and Undo/scene restoration are checked
+within the existing numerical gates. No product algorithm or nominal tolerance
+was changed. Native scenes finish empty and idle with owned synthetic redo history.
+The tests do not establish physical material qualification or rendered pixels.
+
+Before execution, old verifier environments were changed to isolate all strength,
+reference, construction-history and thread-qualification stores. The existing
+isolation helper was moved into a small shared module and re-exported from its
+old location for compatibility. Initial document and Undo/Redo guards now require
+the existing complete empty-document predicate, including auxiliary scene content.
+Five recovery paths explicitly refuse automatic Undo after timeout, disconnect,
+transport/abort/cancel or other uncertain outcomes, including uncertain nested
+causes. Existing journal/document recovery gates remain required for known errors.
+Nonparallel-clearance failures retain their existing read-only reconciliation.
+No installed application or system settings/security were changed.
+
+Legacy coverage rises by 36 tools: both versions now have 349/371 accepted tools
+and 22 pending. Earlier failed evidence is preserved. 1513 root tests, typecheck,
+catalog consistency and diff checks pass. The full-catalog objective remains active.
