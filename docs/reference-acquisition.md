@@ -177,3 +177,8 @@ fixture/target/disposable guards. It checks native readback, immutable provenanc
 Undo/Redo, restart durability and source restoration, then removes its known
 private CAD artifact. Legacy conservative bounds and source/license limitations
 are recorded separately from independent Parasolid box proof.
+
+For the guarded experimental-copy qualification of provider status, live search
+and selected-page listing, see [reference discovery qualification](reference-discovery-qualification.md).
+The fixed known-page search and direct HTML link extraction have separate gates;
+search completion alone does not establish direct-file availability or licensing.

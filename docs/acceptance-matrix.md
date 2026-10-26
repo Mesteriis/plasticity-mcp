@@ -346,3 +346,12 @@ and mass checks; STEP properties remain observations with conservative legacy
 bounds preserved. Four completed durable events stay in sync. Coverage becomes
 311/371 modern and 275/371 legacy; ZIP/binary/assembly and rendering scopes remain
 separate.
+
+Read-only reference discovery: [three guarded cases](reference-discovery-qualification.md)
+pass on each experimental version: availability reporting, selected-page asset
+listing with off-domain rejection and a known-page isolated live web search.
+Native scenes/history remain unchanged; no asset is downloaded or imported.
+Search and direct-link extraction are separate evidence scopes. The initial
+modern 120-second broad-search timeout remains unaccepted. Coverage becomes
+314/371 modern and 278/371 legacy; these host-tool cases do not qualify geometry,
+licensing, dimensions or arbitrary product-name search reliability.
