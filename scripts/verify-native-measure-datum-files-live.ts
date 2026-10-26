@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { verifyNativeBoxGeometry } from "./native-box-geometry.ts";
+
 import { hydrateNativeState } from "./native-live-state.ts";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -13,7 +15,7 @@ import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-stren
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const MEASURE_FILE_CASES = ["bounds", "point-distance", "point-edge-interior", "point-edge-clamped", "linear-edges", "datum-refresh", "construction-plane", "saved-plane-frames", "step-provenance", "save-open"] as const;
+export const MEASURE_FILE_CASES = ["bounds", "point-distance", "point-edge-interior", "point-edge-clamped", "linear-edges", "datum-refresh", "construction-plane", "saved-plane-frames", "step-provenance", "step-provenance-geometry", "save-open"] as const;
 type MeasureFileCase = typeof MEASURE_FILE_CASES[number];
 
 interface Options { case: MeasureFileCase; help: boolean; target?: string; output?: string; allowDisposableMutations: boolean }
@@ -48,6 +50,8 @@ const HELP = `Usage:
 
 Cases: ${MEASURE_FILE_CASES.join(", ")} (select with --case).
 Saved-plane cases require the selected experimental window to be in the foreground.
+step-provenance-geometry checks box topology and preserves conservative recorded bounds;
+the original step-provenance case retains its strict nominal bounds gates.
 
 No-argument and --help modes do not connect to Plasticity. Live mode requires
 an explicit empty disposable document, verifies native measurements, datums and isolated file workflows and
@@ -87,11 +91,21 @@ async function main(): Promise<void> {
     };
     const verifyBox = async (minimum: number[], maximum: number[]): Promise<void> => {
       requireCondition(state.bodies.length === 1 && state.bodies[0].type === "Solid" && state.bodies[0].faces.length === 6 && state.bodies[0].edges.length === 12, "Expected one six-face/twelve-edge Solid");
-      const body = state.bodies[0]; vectorNear(body.boundsMm.min, minimum, 0.00001, "box minimum"); vectorNear(body.boundsMm.max, maximum, 0.00001, "box maximum");
+      const body = state.bodies[0];
+      if (options.case === "step-provenance-geometry") {
+        evidence.boxGeometry = verifyNativeBoxGeometry(body, minimum, maximum);
+        requireCondition(body.boundsMethod === "native-box" || body.boundsMethod === "native-extrema", "Unknown body bounds provenance");
+        requireCondition(body.boundsMm && minimum.every((value, axis) => body.boundsMm.min[axis] <= value + 0.00001 && body.boundsMm.max[axis] >= maximum[axis]! - 0.00001), "Native box does not contain nominal corners");
+        evidence.reportedBounds = { boundsMm: body.boundsMm, boundsMethod: body.boundsMethod };
+      } else { vectorNear(body.boundsMm.min, minimum, 0.00001, "box minimum"); vectorNear(body.boundsMm.max, maximum, 0.00001, "box maximum"); }
       const validation = await call(client!, "plasticity_validate_bodies", { ids: [body.id], revision: state.revision });
       requireCondition(validation.bodies[0]?.nativeValid && validation.bodies[0].printableSolid, "Box failed native validation");
       const mass = await call(client!, "plasticity_measure_solid_properties", { ids: [body.id], revision: state.revision });
       near(mass.bodies[0].volumeMm3, 6000, 0.0001, "box volume");
+      if (options.case === "step-provenance-geometry") {
+        near(mass.bodies[0].surfaceAreaMm2, 2200, 0.0001, "box surface area");
+        vectorNear(mass.bodies[0].volumeCentroidMm, [6,12,18], 0.00001, "box volume centroid");
+      }
     };
     if (["bounds", "point-distance", "point-edge-interior", "point-edge-clamped", "linear-edges"].includes(options.case)) {
       await mutate("plasticity_create_box", { originMm: [0, 0, 0], sizeMm: [10, 20, 30] });
@@ -279,7 +293,7 @@ async function main(): Promise<void> {
       const after = await call(client, "plasticity_list_construction_geometry", {});
       requireCondition(after.activePlaneId === before.activePlaneId && JSON.stringify(state.construction.planes) === JSON.stringify(initial.construction.planes), "Saved-plane cleanup changed initial planes/workplane");
       evidence.planeFrames = results;
-    } else if (options.case === "step-provenance") {
+    } else if (options.case.startsWith("step-provenance")) {
       const path = join(output, "source.step");
       await mutate("plasticity_create_box", { originMm: [1, 2, 3], sizeMm: [10, 20, 30] });
       const beforeExport = state;
@@ -292,6 +306,7 @@ async function main(): Promise<void> {
       const imported = await call(client, "plasticity_import_step", { path, revision: state.revision }); await fresh();
       requireCondition(imported.provenancePersisted && imported.importedArtifactHash === hash && imported.documentToken === state.documentToken && imported.revision === state.revision, "STEP import provenance/identity mismatch");
       await verifyBox([1, 2, 3], [11, 22, 33]); const importedId = state.bodies[0].id;
+      const importedBounds = structuredClone(state.bodies[0].boundsMm);
       await mutate("plasticity_undo", {}); requireEmpty(state); await mutate("plasticity_redo", {}); await verifyBox([1, 2, 3], [11, 22, 33]);
       requireCondition(state.bodies[0].id === importedId, "STEP Redo changed body ID");
       const history = await call(client, "plasticity_construction_history", { limit: 20 });
@@ -302,7 +317,8 @@ async function main(): Promise<void> {
       await verifyBox([1, 2, 3], [11, 22, 33]);
       const list = await call(client, "plasticity_list_step_imports", {}); const record = await call(client, "plasticity_get_step_import", { id: imported.referenceRecordId });
       requireCondition(list.total === 1 && list.records[0].id === imported.referenceRecordId && list.records[0].artifactHash === hash && list.records[0].historical && record.historical, "STEP provenance did not survive MCP restart");
-      vectorNear(record.bodies[0].boundsMm.min, [1, 2, 3], 0.00001, "historical STEP minimum"); vectorNear(record.bodies[0].boundsMm.max, [11, 22, 33], 0.00001, "historical STEP maximum");
+      if (options.case === "step-provenance-geometry") requireCondition(JSON.stringify(record.bodies[0].boundsMm) === JSON.stringify(importedBounds), "Historical STEP record changed the observed bounds");
+      else { vectorNear(record.bodies[0].boundsMm.min, [1, 2, 3], 0.00001, "historical STEP minimum"); vectorNear(record.bodies[0].boundsMm.max, [11, 22, 33], 0.00001, "historical STEP maximum"); }
       const restoredHistory = await call(client, "plasticity_construction_history", { limit: 20 }); requireCondition(restoredHistory.total === history.total, "Durable history did not survive MCP restart");
       state = await call(client, "plasticity_reconcile", {}); await verifyBox([1, 2, 3], [11, 22, 33]);
       await mutate("plasticity_undo", {}); requireEmpty(state);

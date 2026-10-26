@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #24
-(`51931a5182c93c0bb045b4711ec7db999fdfc2a0`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #25
+(`1d2ae12e4b6eed2c3c2213e8d29fec3c010c9b55`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 145 | 153 |
+| Completed passing fixtures | 147 | 155 |
 | Failing or blocked fixtures | 12 | 10 |
-| Tools with success in an application-connected passing fixture | 261 | 303 |
-| Tools attempted only in unaccepted fixtures | 2 | 0 |
-| Tools without a recorded application-connected live call | 108 | 68 |
+| Tools with success in an application-connected passing fixture | 266 | 303 |
+| Tools attempted only in unaccepted fixtures | 0 | 0 |
+| Tools without a recorded application-connected live call | 105 | 68 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -858,3 +858,42 @@ and idle; installed application and security settings were unchanged.
 Validation: 1475 root tests, 23 Workbench web tests and 90 Workbench server tests
 pass. Both typechecks and Workbench build pass; the existing >500 kB advisory
 remains. Matrix consistency and `git diff --check` pass.
+
+
+## Legacy STEP and channel geometry qualification
+
+The original strict fixtures were rerun: both fail their unchanged nominal-box
+checks on 26.1.3, while both pass on 26.2.1. Legacy STEP bounds are expanded by
+0.00005 mm per side; channel max Z is 10.112742414248142 mm instead of 10 mm.
+The conservative API bounds are preserved and those strict failures remain
+separate fixture IDs.
+
+Two explicit geometry variants pass **2/2 on each experimental copy**:
+
+- `step-provenance-geometry`: eight nominal native corners, twelve unique axial
+  endpoint pairs constrained by nonparallel analytic Plane faces, consistent
+  lengths/tangents and six oriented four-edge Plane boundaries; native validity,
+  volume 6000 mm³, area 2200 mm² and centroid (6,12,18). Imported edge wrappers
+  are SPCurve with IsLine=false, so the verifier uses checked plane constraints
+  rather than assuming a Line class name. Invalid supports/corners/boundaries
+  reject in regressions. Linear gates remain 0.00001 mm. Redo, MCP restart,
+  reconciliation, artifact hash and provenance/history persistence pass; immutable
+  historical bounds preserve the actually observed imported bounds.
+- `cable-channel-geometry`: original source/spine/diameter and volume tolerance,
+  six read-only temporary intersections beyond a box padded by 0.00001 mm,
+  and a positive 0.001 mm overlap control. No target material intersects external
+  probes, while the positive control returns a valid intersection Solid.
+  Controls/source are unchanged; Undo/Redo, IDs, full source snapshot restoration
+  and all 25 completed durable events with in-sync status pass.
+
+These native geometry/containment checks do not turn conservative legacy boxes
+into tight measurements or certify arbitrary sub-kernel deviations. See
+[the contracts, limits and repeatable commands](legacy-bounds-qualification.md).
+There is no production adapter change in this continuation. Native planar
+metadata and mass checks remain distinct from rendered or manufacturing proof.
+Accepted coverage becomes 303/371 on 26.2.1 and 266/371 on 26.1.3. Both scenes
+finish empty and idle; installed application and security settings were unchanged.
+
+Validation: 1478 root tests and typecheck pass, including three regressions for
+the independent box verifier. Catalog counts/references and `git diff --check`
+pass. Original legacy strict bounds and other parameter/window/manual gaps remain.

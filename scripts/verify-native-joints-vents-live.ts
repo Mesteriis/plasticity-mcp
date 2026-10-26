@@ -14,7 +14,7 @@ import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-stren
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const JOINT_VENT_CASES = ["vent-array", "heat-set-pocket", "pin-pair", "pin-pattern", "snap-fit", "dovetail", "enclosure", "cable-channel"] as const;
+export const JOINT_VENT_CASES = ["vent-array", "heat-set-pocket", "pin-pair", "pin-pattern", "snap-fit", "dovetail", "enclosure", "cable-channel", "cable-channel-geometry"] as const;
 type JointVentCase = typeof JOINT_VENT_CASES[number];
 
 interface Options { case: JointVentCase; help: boolean; target?: string; output?: string; allowDisposableMutations: boolean }
@@ -48,6 +48,8 @@ const HELP = `Usage:
   node scripts/verify-native-joints-vents-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
 Cases: ${JOINT_VENT_CASES.join(", ")} (select with --case).
+cable-channel-geometry adds six material-envelope probes and a positive overlap
+control. It does not relabel conservative FindBox bounds as exact.
 
 No-argument and --help modes do not connect to Plasticity. Live mode requires
 an explicit empty disposable document, verifies native joints, vents and cable channels and
@@ -83,7 +85,7 @@ async function main(): Promise<void> {
       return result;
     };
     const paired = ["pin-pair", "pin-pattern", "dovetail", "enclosure"].includes(options.case);
-    const size = options.case === "heat-set-pocket" ? [20, 20, 12] : options.case === "snap-fit" ? [5, 20, 10] : options.case === "cable-channel" ? [30, 20, 10] : [30, 20, 5];
+    const size = options.case === "heat-set-pocket" ? [20, 20, 12] : options.case === "snap-fit" ? [5, 20, 10] : options.case.startsWith("cable-channel") ? [30, 20, 10] : [30, 20, 5];
     await mutate("plasticity_create_box", { originMm: [0, 0, 0], sizeMm: size });
     const maleId = state.bodies[0].id;
     let femaleId: number | undefined;
@@ -91,9 +93,24 @@ async function main(): Promise<void> {
     if (paired) {
       await mutate("plasticity_create_box", { originMm: [0, 0, 5], sizeMm: [30, 20, 10] });
       femaleId = state.bodies.find((body: any) => body.id !== maleId).id;
-    } else if (options.case === "cable-channel") {
+    } else if (options.case.startsWith("cable-channel")) {
       await mutate("plasticity_create_polyline", { pointsMm: [[-1, 10, 10], [31, 10, 10]], closed: false });
       spineId = state.bodies.find((body: any) => body.type === "Wire").id;
+    }
+    const probeIds: number[] = [];
+    let positiveControlId: number | undefined;
+    if (options.case === "cable-channel-geometry") {
+      for (let axis = 0; axis < 3; axis += 1) for (const side of [-1,1]) {
+        const origin = [-64,-64,-64]; const probeSize = [128,128,128];
+        if (side > 0) { origin[axis] = size[axis]! + 0.00001; probeSize[axis] = 64 - origin[axis]!; }
+        else probeSize[axis] = 64 - 0.00001;
+        const before = new Set(state.bodies.map((body: any) => body.id));
+        await mutate("plasticity_create_box", { originMm: origin, sizeMm: probeSize });
+        const added = state.bodies.filter((body: any) => !before.has(body.id)); requireCondition(added.length === 1, "Envelope probe creation failed"); probeIds.push(added[0].id);
+      }
+      const before = new Set(state.bodies.map((body: any) => body.id));
+      await mutate("plasticity_create_box", { originMm: [1,1,9.00101], sizeMm: [1,1,1] });
+      positiveControlId = state.bodies.find((body: any) => !before.has(body.id)).id;
     }
     const source = state;
     const sourceSnapshot = await call(client, "plasticity_capture_snapshot", { label: "joint-recipe-source" });
@@ -119,6 +136,7 @@ async function main(): Promise<void> {
       case "enclosure":
         steps = 8;
         report = await mutate("plasticity_create_mating_enclosure_joint", { maleTargetId: maleId, femaleTargetId: femaleId, seamOriginMm: [0, 0, 5], outerWidthMm: 30, outerDepthMm: 20, wallThicknessMm: 2, lipThicknessMm: 1, lipHeightMm: 3, clearanceMm: 0.2, overlapMm: 0.25, cutterOvershootMm: 0.25 }); break;
+      case "cable-channel-geometry":
       case "cable-channel":
         steps = 2;
         report = await mutate("plasticity_cut_cable_channel", { targetId: maleId, spineIds: [spineId], channelDiameterMm: 4 }); break;
@@ -129,8 +147,8 @@ async function main(): Promise<void> {
       evidence.observedBodies = state.bodies.map((body: any) => ({ id: body.id, type: body.type, boundsMm: body.boundsMm }));
       const solids = state.bodies.filter((body: any) => body.type === "Solid");
       const wires = state.bodies.filter((body: any) => body.type === "Wire");
-      const wireCount = options.case === "dovetail" ? 2 : ["snap-fit", "cable-channel"].includes(options.case) ? 1 : 0;
-      requireCondition(solids.length === (paired ? 2 : 1) && wires.length === wireCount && state.bodies.length === solids.length + wires.length, "Unexpected output solids/profiles or leftover cutters");
+      const wireCount = options.case === "dovetail" ? 2 : ["snap-fit", "cable-channel", "cable-channel-geometry"].includes(options.case) ? 1 : 0;
+      requireCondition(solids.length === (paired ? 2 : 1) + probeIds.length + (positiveControlId === undefined ? 0 : 1) && wires.length === wireCount && state.bodies.length === solids.length + wires.length, "Unexpected output solids/profiles or leftover cutters");
       requireCondition(solids.some((body: any) => body.id === maleId) && (!paired || solids.some((body: any) => body.id === femaleId)), "Recipe changed target identities");
       requireCondition(report.consumedToolIds.every((id: number) => !state.bodies.some((body: any) => body.id === id)), "Consumed recipe cutter remains in scene");
       if (spineId !== undefined) requireCondition(wires[0]?.id === spineId, "Cable source Wire identity was not retained");
@@ -144,11 +162,19 @@ async function main(): Promise<void> {
       const pinCount = options.case === "pin-pattern" ? 2 : 1;
       const maleVolume = options.case === "vent-array" ? 3000 - 67.5 * Math.PI : options.case === "heat-set-pocket" ? 4800 - 50.25 * Math.PI : options.case.startsWith("pin-") ? 3000 + pinCount * 16 * Math.PI : options.case === "snap-fit" ? 1088 : options.case === "dovetail" ? 3112 : options.case === "enclosure" ? 3303.75 : 6000 - 60 * Math.PI;
       const femaleVolume = options.case.startsWith("pin-") ? 6000 - pinCount * 2.2 ** 2 * 4.3 * Math.PI : options.case === "dovetail" ? 6000 - 7.4 * 4.4 * 4.3 : 6000 - 133.65 * 3.25;
-      for (const body of mass.bodies) near(body.volumeMm3, body.id === maleId ? maleVolume : femaleVolume, options.case === "cable-channel" ? 0.01 : 0.0001, "recipe volume");
+      for (const body of mass.bodies.filter((body: any) => body.id === maleId || body.id === femaleId)) near(body.volumeMm3, body.id === maleId ? maleVolume : femaleVolume, options.case.startsWith("cable-channel") ? 0.01 : 0.0001, "recipe volume");
       const male = solids.find((body: any) => body.id === maleId);
-      vectorNear(male.boundsMm.min, [0, 0, 0], 0.00001, "male minimum");
       const maximum = paired ? [30, 20, options.case.startsWith("pin-") || options.case === "dovetail" ? 9 : 8] : options.case === "snap-fit" ? [15, 20, 10] : size;
-      vectorNear(male.boundsMm.max, maximum, 0.00001, "male maximum");
+      if (options.case === "cable-channel-geometry") {
+        requireCondition(male.boundsMethod === "native-box" || male.boundsMethod === "native-extrema", "Unknown bounds provenance");
+        requireCondition([...male.boundsMm.min,...male.boundsMm.max].every((value: number) => Math.abs(value) < 64), "Reported body box exceeds the envelope probe domain");
+        if (male.boundsMethod === "native-extrema") { vectorNear(male.boundsMm.min, [0,0,0], 0.00001, "exact minimum"); vectorNear(male.boundsMm.max, maximum, 0.00001, "exact maximum"); }
+        for (const original of source.bodies.filter((body: any) => body.id !== maleId)) requireCondition(JSON.stringify(state.bodies.find((body: any) => body.id === original.id)) === JSON.stringify(original), "Recipe changed its retained source or envelope controls");
+        const containment = await call(client!, "plasticity_check_interference", { pairs: [...probeIds.map(id => ({ firstBodyId: maleId, secondBodyId: id })), { firstBodyId: positiveControlId, secondBodyId: probeIds[5] }], revision: state.revision });
+        requireCondition(containment.source === "native-brep-temporary-intersection" && containment.pairs.length === 7 && containment.pairs.slice(0,6).every((pair: any) => pair.status === "no-volumetric-interference"), "Native material escapes the padded nominal envelope");
+        requireCondition(containment.pairs[6].status === "interfere", "Thin positive envelope control was not detected");
+        evidence.materialEnvelope = { toleranceMm: 0.00001, positiveControlOverlapMm: 0.001, boundsMethod: male.boundsMethod, reportedBoundsMm: male.boundsMm, containment };
+      } else { vectorNear(male.boundsMm.min, [0,0,0], 0.00001, "male minimum"); vectorNear(male.boundsMm.max, maximum, 0.00001, "male maximum"); }
       if (paired) {
         const female = solids.find((body: any) => body.id === femaleId);
         vectorNear(female.boundsMm.min, [0, 0, 5], 0.00001, "female minimum"); vectorNear(female.boundsMm.max, [30, 20, 15], 0.00001, "female maximum");
@@ -190,6 +216,13 @@ async function main(): Promise<void> {
     requireEmpty(state);
     const changes = await call(client, "plasticity_changes_since", { snapshotId: snapshot.snapshotId });
     requireCondition(!hasSceneContentChanges(changes.diff), "Initial empty snapshot not restored");
+    if (options.case === "cable-channel-geometry") {
+      const history = await call(client, "plasticity_construction_history", { limit: 100 });
+      const expected = 2 * (source.undoDepth - initial.undoDepth) + 3 * steps + 1;
+      requireCondition(history.total === expected && history.entries.length === expected && history.entries.every((entry: any) => entry.status === "completed"), "Durable channel history is incomplete");
+      const journal = await call(client, "plasticity_construction_journal", {}); requireCondition(journal.durableSyncStatus === "in-sync", "Durable channel history is out of sync");
+      evidence.durableHistory = { events: history.total, syncStatus: journal.durableSyncStatus };
+    }
     evidence.undoRedo = true;
     evidence.cleanup = { restoredEmptyDocument: true, sceneContentsRestored: true };
     evidence.completedAt = new Date().toISOString();
