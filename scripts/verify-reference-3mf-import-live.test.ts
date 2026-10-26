@@ -53,3 +53,39 @@ test("reference 3MF acceptance rejects unknown and incomplete options", () => {
   assert.throws(() => parseReference3mfAcceptanceArgs(["--target"]), /requires a value/);
   assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--license"]), /requires a value/);
 });
+
+test("3MF empty-scene guard includes annotations, section analyses and non-root groups", async () => {
+  const { requireSceneEmpty } = await import("./verify-reference-3mf-import-live.ts");
+  const empty = { bodies: [], regions: [], groups: [{ id: 0 }] };
+  assert.equal(requireSceneEmpty(empty), true);
+  for (const field of ["bodies", "regions", "instances", "referenceMeshes", "measurements", "sectionAnalyses"]) {
+    assert.equal(requireSceneEmpty({ ...empty, [field]: [{ id: 1 }] }), false, field);
+  }
+  assert.equal(requireSceneEmpty({ ...empty, groups: [{ id: 0 }, { id: 1 }] }), false);
+});
+
+test("3MF verifier stops recovery mutations for unknown timeout and disconnect outcomes", async () => {
+  const { reference3mfFailureNeedsReconcile } = await import("./verify-reference-3mf-import-live.ts");
+  for (const message of ["CDP request timed out: Runtime.callFunctionOn", "MCP error: timeout", "Previous mutation outcome is uncertain", "CDP connection closed before the request completed"]) {
+    assert.equal(reference3mfFailureNeedsReconcile(new Error(message)), true);
+  }
+  assert.equal(reference3mfFailureNeedsReconcile(new Error("3MF unit provenance was not retained")), false);
+});
+
+test("local 3MF fixtures encode embedded units and two independently placed meshes", async () => {
+  const { referenceCube3mf } = await import("./verify-reference-3mf-import-live.ts");
+  const { validateReferenceThreeMfArchive } = await import("../src/plasticity/three-mf.ts");
+  for (const fixture of ["millimeter", "meter", "two-meshes"] as const) {
+    const parsed = validateReferenceThreeMfArchive(referenceCube3mf(fixture));
+    const count = fixture === "two-meshes" ? 2 : 1;
+    assert.equal(parsed.modelUnit, fixture === "meter" ? "meter" : "millimeter");
+    assert.equal(parsed.objects, count);
+    assert.equal(parsed.buildItems, count);
+    assert.equal(parsed.vertices, 8 * count);
+    assert.equal(parsed.triangles, 12 * count);
+    assert.deepEqual(parsed.boundsMm, { min: [0, 0, 0], max: [count === 2 ? 14 : 4, 4, 4], size: [count === 2 ? 14 : 4, 4, 4] });
+  }
+  assert.equal(parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "meter"]).localFixture, "meter");
+  assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "unknown"]), /--local-fixture must/);
+  assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "meter", "--source-url", "https://example.test/model.3mf", "--source-page-url", "https://example.test/models", "--license", "synthetic"]), /cannot be combined/);
+});

@@ -324,3 +324,9 @@ stale scene pixels.
 Separate manually focused 26.1.3/26.2.1 external-window reviews now pass creation,
 15 mm update and deletion glyph checks. Earlier stale captures remain failed.
 Background freshness and default full-window MCP capture remain outside acceptance.
+
+Local reference 3MF: [three guarded variants](reference-3mf-qualification.md)
+pass on experimental 26.2.1 and 26.1.3, covering millimeter/meter units, two
+meshes, native mesh counts/bounds, original artifact hash, provenance list/get,
+Undo/Redo, MCP restart and four completed durable events. Approximate mesh
+metadata does not qualify rendered pixels, editable B-Rep or physical accuracy.

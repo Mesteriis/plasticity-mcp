@@ -969,3 +969,24 @@ restoration and empty/idle cleanup pass. This completes the bounded foreground
 external-window lifecycle on both versions. Earlier stale-window failures remain
 separate; background freshness and default full-window MCP capture stay outside
 acceptance. No code changed; catalog counts/references and diff checks pass.
+
+## Local reference 3MF units, multi-mesh and provenance
+
+Three synthetic local 3MF variants pass on each experimental version: a 4 mm
+millimeter cube, the same cube encoded in meters, and two independently placed
+meshes. The strengthened verifier isolates every store, refuses annotations,
+section analyses/non-root groups, and stops recovery on unknown timeout or
+connection outcomes. It verifies public mesh/provenance listing, exact source
+artifact SHA-256, embedded-unit provenance, per-mesh bounds/counts, stable IDs
+through Undo/Redo, complete source restoration, and four completed durable events
+with in-sync status after MCP restart. All scenes finish empty and idle.
+
+[Commands and limits](reference-3mf-qualification.md) keep approximate reference
+meshes separate from exact B-Rep, rendered pixels and manufacturing acceptance.
+No network source, license or asset discovery is qualified by synthetic metadata.
+There is no production adapter change. A read-only default-window capture recheck
+still rejects hidden renderers on both versions without changing CAD/history.
+
+Tool coverage becomes 307/371 on 26.2.1 and 271/371 on 26.1.3, adding local 3MF
+import, reference mesh listing and provenance list/get. Existing failed fixtures
+remain. 1485 root tests, typecheck, catalog consistency and diff checks pass.
