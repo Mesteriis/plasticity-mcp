@@ -4,7 +4,7 @@ import { mkdir, open, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 
-import { calculateMmbModeIEnergy, mmbModeIEnergyInputSchema } from "./mmb-mode-i-ii-energy.ts";
+import { calculateMmbModeIEnergy, mmbModeIEnergyInputSchema, validateStoredMmbModeIEnergyCalculation } from "./mmb-mode-i-ii-energy.ts";
 
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/i);
 
@@ -35,6 +35,8 @@ const recordEnvelopeSchema = z.object({
 export type MmbModeIEnergyRecordInput = z.infer<typeof mmbModeIEnergyRecordInputSchema>;
 export type MmbModeIEnergyQuery = z.infer<typeof mmbModeIEnergyQuerySchema>;
 export type MmbModeIEnergyRecord = {
+  recalculatedFromVersion?: 1;
+  recalculationReason?: "MMB_V1_ARM_THICKNESS_HALVED";
   input: MmbModeIEnergyRecordInput;
   calculation: ReturnType<typeof calculateMmbModeIEnergy>;
   id: string;
@@ -132,9 +134,11 @@ export class MmbModeIEnergyTestStore {
       const envelope = recordEnvelopeSchema.parse(parsed);
       if (envelope.id !== hash || hashInput(envelope.input) !== hash) throw new Error(`MMB energy record content hash mismatch: ${hash}`);
       const { callerConfirmsPhysicalTests: _confirmation, ...calculationInput } = envelope.input;
+      if (!validateStoredMmbModeIEnergyCalculation(calculationInput, envelope.calculation)) throw new Error(`MMB energy result no longer matches its immutable test input: ${hash}`);
       const calculation = calculateMmbModeIEnergy(calculationInput);
-      if (canonicalJson(calculation) !== canonicalJson(envelope.calculation)) throw new Error(`MMB energy result no longer matches its immutable test input: ${hash}`);
+      const legacy = (envelope.calculation as { calculationVersion: number }).calculationVersion === 1;
       return {
+        ...(legacy ? { recalculatedFromVersion: 1 as const, recalculationReason: "MMB_V1_ARM_THICKNESS_HALVED" as const } : {}),
         input: envelope.input,
         calculation,
         id: envelope.id,

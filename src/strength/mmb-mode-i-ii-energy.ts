@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { z } from "zod";
 
 import { exactMaterialCouponProcessSchema } from "./material-qualification.ts";
@@ -18,7 +20,7 @@ const specimenSchema = z.object({
   specimenId: id,
   widthMm: z.number().finite().positive(),
   totalLengthMm: z.number().finite().positive(),
-  armThicknessMm: z.number().finite().positive(),
+  armThicknessMm: z.number().finite().positive().describe("Thickness of one delaminated arm: half the full symmetric specimen thickness, in mm"),
   halfSpanMm: z.number().finite().positive(),
   leverArmMm: z.number().finite().positive(),
   initialCrackLengthMm: z.number().finite().positive(),
@@ -67,13 +69,27 @@ export const mmbModeIEnergyInputSchema = z.object({
 export type MmbModeIEnergyInput = z.infer<typeof mmbModeIEnergyInputSchema>;
 
 export function calculateMmbModeIEnergy(rawInput: unknown) {
+  return calculateVersionedMmbModeIEnergy(rawInput, 2);
+}
+
+// Version 1 is reconstructed solely to authenticate old immutable records. It
+// must never be used as a current calculation or returned as current evidence.
+export function validateStoredMmbModeIEnergyCalculation(rawInput: unknown, stored: unknown): boolean {
+  if (stored === null || typeof stored !== "object" || !("calculationVersion" in stored)) return false;
+  const version = stored.calculationVersion;
+  if (version !== 1 && version !== 2) return false;
+  const expected = calculateVersionedMmbModeIEnergy(rawInput, version);
+  return isDeepStrictEqual(JSON.parse(JSON.stringify(expected)), stored);
+}
+
+function calculateVersionedMmbModeIEnergy<V extends 1 | 2>(rawInput: unknown, version: V) {
   const input = mmbModeIEnergyInputSchema.parse(rawInput);
   const axis1 = input.interfaceShearDirectionGlobal;
   const axis3 = input.interfaceNormalGlobal;
   const axis2 = normalize(cross(axis3, axis1));
   return {
     method: "reeder-crews-mmb-beam-theory" as const,
-    calculationVersion: 1 as const,
+    calculationVersion: version,
     methodReference: "Reeder-Crews MMB beam-theory partition using measured flexural and orthotropic moduli",
     materialProcess: input.materialProcess,
     interfaceNormalGlobal: axis3,
@@ -88,7 +104,9 @@ export function calculateMmbModeIEnergy(rawInput: unknown) {
     flexuralModulus: input.flexuralModulus,
     orthotropicModuli: input.orthotropicModuli,
     specimens: input.specimens.map((specimen) => {
-      const h = specimen.armThicknessMm / 2;
+      // Reeder-Crews h is specimen half-thickness, i.e. one arm. Version 1
+      // incorrectly halved the already per-arm input a second time.
+      const h = version === 1 ? specimen.armThicknessMm / 2 : specimen.armThicknessMm;
       const gamma = 1.18 * Math.sqrt(input.orthotropicModuli.E11MPa * input.orthotropicModuli.E22MPa) / input.orthotropicModuli.G13MPa;
       const chi = Math.sqrt((input.orthotropicModuli.E11MPa / (11 * input.orthotropicModuli.G13MPa))
         * (3 - 2 * (gamma / (1 + gamma)) ** 2));

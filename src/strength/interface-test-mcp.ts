@@ -181,6 +181,8 @@ export function registerMaterialInterfaceTestTools(server: McpServer, store: Int
         selectedRecordId: result.selected?.id ?? null,
         records: result.records.map((record) => ({
           id: record.id,
+          calculationVersion: record.calculation.calculationVersion,
+          ...(record.recalculatedFromVersion ? { recalculatedFromVersion: record.recalculatedFromVersion, recalculationReason: record.recalculationReason } : {}),
           testedAt: record.input.testedAt,
           testMethod: record.input.testMethod,
           specimenCount: record.calculation.specimens.length,
@@ -208,6 +210,8 @@ export function registerMaterialInterfaceTestTools(server: McpServer, store: Int
       source: "immutable-local-physical-mmb-mode-i-ii-energy-registry",
       records: (await mmbEnergyStore.list()).map((record) => ({
         id: record.id,
+        calculationVersion: record.calculation.calculationVersion,
+        ...(record.recalculatedFromVersion ? { recalculatedFromVersion: record.recalculatedFromVersion, recalculationReason: record.recalculationReason } : {}),
         materialProcess: record.input.materialProcess,
         interfaceNormalGlobal: record.input.interfaceNormalGlobal,
         interfaceShearDirectionGlobal: record.input.interfaceShearDirectionGlobal,

@@ -1,5 +1,17 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+
+test("MMB uses one arm thickness as h against independent Decimal-60 numeric gates", () => {
+  const legacy = JSON.parse(readFileSync(new URL("./fixtures/mmb-v1-synthetic.json", import.meta.url), "utf8"));
+  const { callerConfirmsPhysicalTests: _, ...input } = legacy.input;
+  const result = calculateMmbModeIEnergy(input);
+  const specimen = result.specimens[0]!;
+  assert.ok(Math.abs(specimen.modeIEnergyReleaseRateJPerM2 - 41486.7787876807657) < 1e-9);
+  assert.ok(Math.abs(specimen.modeIIEnergyReleaseRateJPerM2 - 10714.1168920638601) < 1e-9);
+  assert.ok(Math.abs(specimen.totalEnergyReleaseRateJPerM2 - 52200.8956797446258) < 1e-9);
+  assert.ok(Math.abs(specimen.modeIIModeMixFraction - 0.20524775968971027) < 1e-12);
+});
 
 import { calculateMmbModeIEnergy, mmbModeIEnergyInputSchema } from "./mmb-mode-i-ii-energy.ts";
 
@@ -55,7 +67,7 @@ const base = {
 test("calculates MMB Mode-I and Mode-II initiation energy using measured axes and exact provenance", () => {
   const result = calculateMmbModeIEnergy(base);
   assert.equal(result.method, "reeder-crews-mmb-beam-theory");
-  assert.equal(result.calculationVersion, 1);
+  assert.equal(result.calculationVersion, 2);
   assert.equal(result.testProtocolHash, "c".repeat(64));
   assert.ok(result.specimens[0]!.modeIEnergyReleaseRateJPerM2 > 0);
   assert.ok(result.specimens[0]!.modeIIEnergyReleaseRateJPerM2 > 0);

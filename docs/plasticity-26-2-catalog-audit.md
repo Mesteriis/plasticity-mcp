@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #31
-(`bcb9fbb8dd94fb3f3c5bdcec43202e6da95be4ce`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #32
+(`589a776d6080f4589ab1815b1d54ec3a8f3bc923`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 166 | 174 |
-| Failing or blocked fixtures | 13 | 15 |
-| Tools with success in an application-connected passing fixture | 295 | 331 |
+| Completed passing fixtures | 169 | 177 |
+| Failing or blocked fixtures | 13 | 16 |
+| Tools with success in an application-connected passing fixture | 313 | 349 |
 | Tools attempted only in unaccepted fixtures | 0 | 0 |
-| Tools without a recorded application-connected live call | 76 | 40 |
+| Tools without a recorded application-connected live call | 58 | 22 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -1130,3 +1130,24 @@ catalog count/reference consistency and diff checks pass. Both copies finish
 empty and idle; installed apps/settings/security are unchanged. This does not
 qualify physical source authenticity, fracture-energy-from-crack-growth methods,
 mixed-mode cohesive calibration, rendered geometry, manufacturing or FEM.
+
+## DCB, ENF and MMB energy registries
+
+Three production stdio cases pass on both experimental versions, adding 18 tools
+per version. [Numerical gates, CSV selections and scope](fracture-energy-qualification.md)
+include immutable registration/list/read, exact matching, conflicts, idempotency,
+source hash/byte preservation and restart. No physical tests were performed.
+
+MMB had a real per-arm thickness defect, independently identified against the
+source definition and Decimal-60 numeric gates. Version 2 uses one arm's thickness
+directly. A focused regression and live modern fixture failed before the fix.
+The failure remains a separate unaccepted fixture. Version-1 records authenticate
+their original result, then return explicitly annotated corrected views without
+rewriting source bytes/IDs. Both versions pass production read/list/match, repeat
+registration and restart of a synthetic old record. Unknown/tampered stored
+calculations remain rejected.
+
+Coverage becomes 349/371 modern and 313/371 legacy. 1511 root tests, typecheck,
+catalog count/reference consistency and diff checks pass. Native scenes remain
+empty/idle and unchanged by each fixture. This does not establish physical-test
+validity, a cohesive law, manufactured-part strength or FEM correctness.

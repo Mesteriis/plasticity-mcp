@@ -265,3 +265,15 @@ plate report; measured geometry does not confirm support or material. See
 
 The single-through-fastener path has a separate exact-geometry and calculation
 acceptance. See [`fastener-strength-acceptance.md`](fastener-strength-acceptance.md).
+
+### MMB calculation version 2
+
+`armThicknessMm` means one delaminated arm, half the full symmetric specimen
+thickness. MMB version 1 incorrectly halved this input again; version 2 uses it
+directly. Legacy immutable records are authenticated against their original
+version, then returned as corrected version-2 views with
+`recalculatedFromVersion: 1` and `MMB_V1_ARM_THICKNESS_HALVED` reason metadata;
+list/match expose this correction too. Files and source IDs are not rewritten.
+Unknown/tampered calculations remain rejected. See [fracture-energy qualification](fracture-energy-qualification.md)
+for the independent numeric gates, historical-data tests and experimental-copy
+results. This correction does not establish physical-test validity.

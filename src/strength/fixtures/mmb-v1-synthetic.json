@@ -1,0 +1,161 @@
+{
+  "input": {
+    "materialProcess": {
+      "printerId": "synthetic-printer",
+      "materialId": "synthetic-not-printable",
+      "profileHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "orientationDeg": [
+        0,
+        0,
+        0
+      ],
+      "infillPercent": 100,
+      "infillPattern": "grid",
+      "wallLoops": 2,
+      "topShellLayers": 5,
+      "bottomShellLayers": 3,
+      "nozzleTemperatureC": 220,
+      "layerHeightMm": 0.2
+    },
+    "interfaceNormalGlobal": [
+      0,
+      0,
+      1
+    ],
+    "interfaceShearDirectionGlobal": [
+      1,
+      0,
+      0
+    ],
+    "testProtocolHash": "ddb4ee2db0206b5c6235dea4fe714197927e50588a82cfe38cc21561770bc64b",
+    "testMethod": "SYNTHETIC MMB beam-theory initiation screen",
+    "testedAt": "2026-09-25T12:00:00Z",
+    "axesMappingConfirmed": "moduli-axis-1-matches-shear-axis-2-is-in-plane-transverse-3-is-interface-normal",
+    "leverWeight": "measured-negligible-or-counterbalanced",
+    "flexuralModulus": {
+      "valueMPa": 1800,
+      "sourceHash": "cd22726a833db0cf4cfd838f442a619fceee4225ace6376b98b6b3a1db4414b6",
+      "sourceLocator": "SYNTHETIC:flexure.csv!records 20-40"
+    },
+    "orthotropicModuli": {
+      "E11MPa": 2000,
+      "E22MPa": 1500,
+      "G13MPa": 500,
+      "sourceHash": "cd22726a833db0cf4cfd838f442a619fceee4225ace6376b98b6b3a1db4414b6",
+      "sourceLocator": "SYNTHETIC:coupon.pdf!table 3"
+    },
+    "specimens": [
+      {
+        "specimenId": "MMB-1",
+        "widthMm": 25,
+        "totalLengthMm": 150,
+        "armThicknessMm": 2.5,
+        "halfSpanMm": 50,
+        "leverArmMm": 100,
+        "initialCrackLengthMm": 50,
+        "criticalForceN": 120,
+        "initiationCriterion": "visual-crack-initiation",
+        "failureLocation": "interface",
+        "sourceHash": "cd22726a833db0cf4cfd838f442a619fceee4225ace6376b98b6b3a1db4414b6",
+        "sourceLocator": "SYNTHETIC:mmb.csv!record 12"
+      }
+    ],
+    "callerConfirmsPhysicalTests": true
+  },
+  "calculation": {
+    "method": "reeder-crews-mmb-beam-theory",
+    "calculationVersion": 1,
+    "methodReference": "Reeder-Crews MMB beam-theory partition using measured flexural and orthotropic moduli",
+    "materialProcess": {
+      "printerId": "synthetic-printer",
+      "materialId": "synthetic-not-printable",
+      "profileHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "orientationDeg": [
+        0,
+        0,
+        0
+      ],
+      "infillPercent": 100,
+      "infillPattern": "grid",
+      "wallLoops": 2,
+      "topShellLayers": 5,
+      "bottomShellLayers": 3,
+      "nozzleTemperatureC": 220,
+      "layerHeightMm": 0.2
+    },
+    "interfaceNormalGlobal": [
+      0,
+      0,
+      1
+    ],
+    "interfaceShearDirectionGlobal": [
+      1,
+      0,
+      0
+    ],
+    "materialAxis1Global": [
+      1,
+      0,
+      0
+    ],
+    "materialAxis2Global": [
+      0,
+      1,
+      0
+    ],
+    "materialAxis3Global": [
+      0,
+      0,
+      1
+    ],
+    "testProtocolHash": "ddb4ee2db0206b5c6235dea4fe714197927e50588a82cfe38cc21561770bc64b",
+    "testMethod": "SYNTHETIC MMB beam-theory initiation screen",
+    "testedAt": "2026-09-25T12:00:00Z",
+    "axesMappingConfirmed": "moduli-axis-1-matches-shear-axis-2-is-in-plane-transverse-3-is-interface-normal",
+    "flexuralModulus": {
+      "valueMPa": 1800,
+      "sourceHash": "cd22726a833db0cf4cfd838f442a619fceee4225ace6376b98b6b3a1db4414b6",
+      "sourceLocator": "SYNTHETIC:flexure.csv!records 20-40"
+    },
+    "orthotropicModuli": {
+      "E11MPa": 2000,
+      "E22MPa": 1500,
+      "G13MPa": 500,
+      "sourceHash": "cd22726a833db0cf4cfd838f442a619fceee4225ace6376b98b6b3a1db4414b6",
+      "sourceLocator": "SYNTHETIC:coupon.pdf!table 3"
+    },
+    "specimens": [
+      {
+        "specimenId": "MMB-1",
+        "widthMm": 25,
+        "totalLengthMm": 150,
+        "armThicknessMm": 2.5,
+        "halfSpanMm": 50,
+        "leverArmMm": 100,
+        "initialCrackLengthMm": 50,
+        "criticalForceN": 120,
+        "initiationCriterion": "visual-crack-initiation",
+        "failureLocation": "interface",
+        "eligibleForLayerInterfaceEvidence": true,
+        "sourceHash": "cd22726a833db0cf4cfd838f442a619fceee4225ace6376b98b6b3a1db4414b6",
+        "sourceLocator": "SYNTHETIC:mmb.csv!record 12",
+        "gamma": 4.08763990586255,
+        "chi": 0.7883127190498069,
+        "modeIEnergyReleaseRateJPerM2": 319427.79925766407,
+        "modeIIEnergyReleaseRateJPerM2": 84322.78479090083,
+        "totalEnergyReleaseRateJPerM2": 403750.58404856484,
+        "modeIIModeMixFraction": 0.20884870046592457
+      }
+    ],
+    "limitations": [
+      "This exploratory Reeder-Crews MMB beam-theory partition is not a determination of ASTM D6671 conformity. ASTM D6671/D6671M scope is unidirectional fiber-reinforced composite laminates; printed PLA is outside that validated scope.",
+      "The caller must supply measured critical initiation force, geometry, flexural modulus, and orthotropic E11/E22/G13 values from the same material process with the confirmed axis mapping. The calculator cannot verify the physical measurements, crack initiation criterion, or that the interface was the failure plane.",
+      "The calculation assumes a linear-elastic beam response, the stated MMB fixture geometry, negligible or counterbalanced lever self-weight, and no unentered fixture or machine-compliance corrections. It does not generate an R-curve or validate specimen size, crack-front straightness, or standard acceptance criteria.",
+      "The returned values are exploratory fracture-energy partition estimates only. They are not local peak interface traction or cohesive stiffness, are not a traction-separation curve, and are not a design allowable, material qualification, or print approval.",
+      "Do not use this MMB estimate as a substitute for full exact-process interface traction-separation data required by the calibrated cohesive solver."
+    ]
+  },
+  "id": "f08ef9db01db4224bf9b7998677b450f82dbbdd3a390fe51e6b22c55c701d2e8",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "recordStatus": "caller-attested-physical-mmb-mode-i-ii-energy-test"
+}
