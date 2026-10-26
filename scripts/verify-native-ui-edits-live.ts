@@ -124,7 +124,7 @@ async function main(): Promise<void> {
       "Redo did not restore the exact directly edited Solid bounds");
     evidence.undoRedo = { verified: true, afterUndo: compactBody(undone.bodies[0]!), afterRedo: compactBody(redone.bodies[0]!) };
 
-    const cleanup = await recover(live.client, initialState, ownedRevision, ownedBodyId);
+    const cleanup = await recoverNativeUiFixture(live.client, initialState, ownedRevision, ownedBodyId);
     evidence.cleanup = cleanup;
     requireCondition(cleanup.restoredEmptyDocument === true, "Recovery did not restore the original empty document");
     const finalState = await call(live.client, "plasticity_status", {});
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
   } catch (error) {
     evidence.error = boundedError(error);
     if (live && initialState && permitsNativeFailureRecovery(error)) {
-      const cleanup = await recover(live.client, initialState, ownedRevision, ownedBodyId).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
+      const cleanup = await recoverNativeUiFixture(live.client, initialState, ownedRevision, ownedBodyId).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
       evidence.cleanup = cleanup;
     }
     if (!permitsNativeFailureRecovery(error)) evidence.cleanup = { restoredEmptyDocument: false, reason: "uncertain-outcome-read-only-inspection-required" };
@@ -184,7 +184,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   if (!text || response.isError) throw new Error(text ?? `MCP tool ${name} returned no text`);
   return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
-async function recover(client: Client, initial: any, expectedRevision: string | undefined, bodyId: number | undefined): Promise<Record<string, unknown>> {
+export async function recoverNativeUiFixture(client: Client, initial: any, expectedRevision: string | undefined, bodyId: number | undefined): Promise<Record<string, unknown>> {
   let state = await call(client, "plasticity_status", {});
   if (state.documentToken !== initial.documentToken || state.revision !== expectedRevision) {
     return { restoredEmptyDocument: false, reason: "document-or-revision-ownership-changed" };
