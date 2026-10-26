@@ -338,3 +338,11 @@ mesh geometry, Undo/Redo, source restoration and restart durability. Sequential
 ASCII STL blocks now pass strict structural validation; the initial rejection
 is retained. Network/geometry evidence does not qualify rendered pixels or
 physical dimensions. Coverage becomes 309/371 modern and 273/371 legacy.
+
+Pinned HTTPS STEP/Parasolid: [two direct-file native CAD fixtures](network-cad-qualification.md)
+pass on both experimental versions, including native validity, provenance,
+Undo/Redo, restart and source restoration. Parasolid has independent planar-box
+and mass checks; STEP properties remain observations with conservative legacy
+bounds preserved. Four completed durable events stay in sync. Coverage becomes
+311/371 modern and 275/371 legacy; ZIP/binary/assembly and rendering scopes remain
+separate.
