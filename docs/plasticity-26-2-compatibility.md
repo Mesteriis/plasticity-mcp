@@ -80,6 +80,12 @@ on both success and rejection. Remote debugging remains bound to loopback.
   and OS window visibility are outside native-canvas capture scope. See
   [screenshot modes](viewport-screenshots.md).
 
+- Separate STEP/channel geometry fixtures pass on both versions without
+  changing conservative legacy boxes. Original strict 26.1.3 nominal-box
+  gates remain unaccepted; imported corners/plane constraints and native
+  material-envelope probes provide independent evidence. See
+  [legacy bounds qualification](legacy-bounds-qualification.md).
+
 ## Catalog audit follow-up
 
 The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every

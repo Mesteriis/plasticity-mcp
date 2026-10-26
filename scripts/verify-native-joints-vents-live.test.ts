@@ -26,4 +26,5 @@ test("catalog acceptance selects only known cases", () => {
   assert.throws(() => parseNativeJointsVentsAcceptanceArgs(["--help", "--case", "unknown"]), /Unknown catalog case/u);
   assert.throws(() => parseNativeJointsVentsAcceptanceArgs(["--case"]), /requires a value/u);
   assert.equal(parseNativeJointsVentsAcceptanceArgs(["--help", "--case", "enclosure"]).case, "enclosure");
+  assert.equal(parseNativeJointsVentsAcceptanceArgs(["--help", "--case", "cable-channel-geometry"]).case, "cable-channel-geometry");
 });

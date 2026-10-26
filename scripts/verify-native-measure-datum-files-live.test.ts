@@ -27,6 +27,7 @@ test("catalog acceptance selects only known cases", () => {
   assert.throws(() => parseNativeMeasureDatumFilesAcceptanceArgs(["--case"]), /requires a value/u);
   assert.equal(parseNativeMeasureDatumFilesAcceptanceArgs(["--help", "--case", "save-open"]).case, "save-open");
   assert.equal(parseNativeMeasureDatumFilesAcceptanceArgs(["--help", "--case", "saved-plane-frames"]).case, "saved-plane-frames");
+  assert.equal(parseNativeMeasureDatumFilesAcceptanceArgs(["--help", "--case", "step-provenance-geometry"]).case, "step-provenance-geometry");
 });
 
 test("acceptance scopes every persistent store and excludes unrelated runtime overrides", () => {
