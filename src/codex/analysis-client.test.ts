@@ -167,6 +167,35 @@ test("AbortSignal interrupts the owned turn and exits the process", async (conte
   await waitForFile(harness.exitRecord);
 });
 
+test("cancellation before a turn ID survives a late response during process close", async (context) => {
+  const harness = await createHarness(context, "late-turn-id-on-close");
+  const client = await createAnalysisClient(harness.profile, { executable: process.execPath, assetRoot: harness.assetRoot });
+  const controller = new AbortController();
+  const rejected = assert.rejects(
+    client.run(request("cancel-before-turn-id"), { timeoutMs: 5_000, signal: controller.signal }),
+    (error: unknown) => hasCode(error, "ANALYSIS_CANCELLED"),
+  );
+  await waitForMethod(harness.record, "turn/start");
+  controller.abort();
+  await rejected;
+  await client.close();
+  await waitForFile(harness.exitRecord);
+  const called = await methods(harness.record);
+  assert.equal(called.filter((method) => method === "turn/start").length, 1);
+  assert.ok(called.includes("late-turn/start-response"));
+  assert.equal(called.includes("turn/interrupt"), false, "an unknown turn ID cannot be interrupted; closing is the cancellation boundary");
+});
+
+test("process failure before a turn ID is still reported to the caller", async (context) => {
+  const harness = await createHarness(context, "crash");
+  const client = await createAnalysisClient(harness.profile, { executable: process.execPath, assetRoot: harness.assetRoot });
+  await assert.rejects(() => client.run(request("early-process-failure"), { timeoutMs: 5_000 }),
+    (error: unknown) => hasCode(error, "CODEX_PROCESS_FAILED"));
+  await client.close();
+  await waitForFile(harness.exitRecord);
+  assert.equal((await methods(harness.record)).includes("turn/start"), false);
+});
+
 test("images must be bounded readable PNG/JPEG/HEIC/HEIF files inside a trusted root", async (context) => {
   const harness = await createHarness(context, "success");
   const png = join(harness.assetRoot, "sketch.png");

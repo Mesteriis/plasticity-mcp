@@ -29,5 +29,9 @@ synthetic software fixtures. The original native open-document timeout was fixed
 by save-before-open with an exclusive backup; completed legacy reopen/cache and
 rational STEP/SVG scenarios provide its separate regression evidence.
 
-PR #35 is merged with both checks green. The full goal remains active while direct mouse-edit acceptance and the focus-helper/disposition continuation review are pending. The installed applications and their security
+PR #35 and #36 are merged. The original PR #36 cancellation-test failure is
+preserved and independently reproduced in the
+[Codex cancellation qualification](codex-cancellation-qualification.md). The full
+goal remains active while direct mouse-edit acceptance and cancellation-fix
+review/CI are pending. The installed applications and their security
 settings are unchanged.

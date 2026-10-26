@@ -150,6 +150,10 @@ class IsolatedAnalysisClient implements AnalysisClient {
     const completion = deferred<{ status: string; failureDiagnostics?: AnalysisFailureDiagnostics }>();
     const forbidden = deferred<never>();
     const processFailure = deferred<never>();
+    // Cancellation can close the process before turn/start returns its ID and
+    // the completion race below exists. Observe this cached rejection now;
+    // pending RPC requests and the later race still propagate real failures.
+    void processFailure.promise.catch(() => undefined);
     rpc.onNotification((method, params) => {
       if (method === "item/completed" && isRecord(params) && typeof params.turnId === "string" && isRecord(params.item)) {
         if (params.item.type === "agentMessage" && typeof params.item.text === "string") {
