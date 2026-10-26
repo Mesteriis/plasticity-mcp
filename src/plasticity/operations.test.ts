@@ -4701,12 +4701,13 @@ test("imprints native Wire bodies onto a target body along an explicit vector", 
     targetId: 7,
     curveIds: [11],
     direction: [0, 0, -1],
+    projectionMethodName: "Vector",
     bidirectional: false,
     occlude: true,
     completionName: "None",
   }]);
   assert.match(call?.source ?? "", /ImprintCurveBodyCommand/);
-  assert.match(call?.source ?? "", /factory\.method = ProjectionMethod\.Vector/);
+  assert.match(call?.source ?? "", /factory\.method = ProjectionMethod\[args\.projectionMethodName\]/);
 });
 
 test("rejects invalid native curve imprint inputs before mutation", async () => {
@@ -6732,4 +6733,21 @@ test("appearance assignment clears with native undefined on legacy and modern ed
     assert.equal(assignments.get(7), 2); assert.equal(assignments.get(8), 2);
     assert.equal(commands, 3); assert.deepEqual(seen, [undefined, 2, undefined]);
   }
+});
+
+
+test("normal imprint uses the native normal method without inventing a vector", async () => {
+  const state = { revision: "r1" } as RuntimeState;
+  const calls: Array<{ source: string; values: any[] }> = [];
+  const runtime = { async getState() { return state; }, async mutate(source: string, _bindings: string[], values: any[]) { calls.push({ source, values }); } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  await operations.imprintCurvesOnBody(7, [11], undefined, { projectionMethod: "normal" }, state.revision);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.values[0].direction, null);
+  assert.equal(calls[0]!.values[0].projectionMethodName, "Normal");
+  assert.match(calls[0]!.source, /if \(args.direction\) factory.direction.copy/);
+  await assert.rejects(operations.imprintCurvesOnBody(7, [11], undefined, {}, state.revision), /direction must be nonzero/);
+  await assert.rejects(operations.imprintCurvesOnBody(7, [11], [0,0,-1], { projectionMethod: "normal" }, state.revision), /only valid for vector/);
+  await assert.rejects(operations.imprintCurvesOnBody(7, [11], [0,0,-1], { projectionMethod: "invalid" as never }, state.revision), /Unsupported imprint projection/);
+  assert.equal(calls.length, 1);
 });

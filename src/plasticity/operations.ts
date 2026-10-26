@@ -6312,8 +6312,8 @@ export class PlasticityOperations {
   async imprintCurvesOnBody(
     targetId: number,
     curveIds: number[],
-    direction: Vector3,
-    options: { bidirectional?: boolean; occlude?: boolean; completion?: "none" | "edge" | "face-set" },
+    direction: Vector3 | undefined,
+    options: { projectionMethod?: "vector" | "normal"; bidirectional?: boolean; occlude?: boolean; completion?: "none" | "edge" | "face-set" },
     revision: string,
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
@@ -6321,9 +6321,12 @@ export class PlasticityOperations {
     const uniqueIds = [...new Set(curveIds)];
     if (uniqueIds.length !== curveIds.length) throw new Error("Wire IDs must be unique");
     if (uniqueIds.includes(targetId)) throw new Error("Imprint curves must not include the target body");
-    const length = Math.hypot(...direction);
-    if (!Number.isFinite(length) || length === 0) throw new Error("Imprint direction must be nonzero");
-    const normalizedDirection = direction.map((value) => value / length) as Vector3;
+    const projectionMethod = options.projectionMethod ?? "vector";
+    if (projectionMethod !== "vector" && projectionMethod !== "normal") throw new Error("Unsupported imprint projection method");
+    if (projectionMethod === "normal" && direction !== undefined) throw new Error("Imprint direction is only valid for vector projection");
+    const length = direction ? Math.hypot(...direction) : 0;
+    if (projectionMethod === "vector" && (!Number.isFinite(length) || length === 0)) throw new Error("Imprint vector direction must be nonzero");
+    const normalizedDirection = direction ? direction.map((value) => value / length) as Vector3 : null;
     const completion = options.completion ?? "none";
     const completionName = ({ none: "None", edge: "Edge", "face-set": "FaceSet" } as const)[completion];
     if (!completionName) throw new Error(`Unsupported imprint completion: ${completion}`);
@@ -6339,8 +6342,8 @@ export class PlasticityOperations {
       });
       factory.target = target;
       factory.curves = curves;
-      factory.method = ProjectionMethod.Vector;
-      factory.direction.copy(new Vector(...args.direction));
+      factory.method = ProjectionMethod[args.projectionMethodName];
+      if (args.direction) factory.direction.copy(new Vector(...args.direction));
       factory.bidirectional = args.bidirectional;
       factory.occlude = args.occlude;
       factory.complete = ProjectionCompletionType[args.completionName];
@@ -6349,6 +6352,7 @@ export class PlasticityOperations {
       targetId,
       curveIds: uniqueIds,
       direction: normalizedDirection,
+      projectionMethodName: projectionMethod === "normal" ? "Normal" : "Vector",
       bidirectional: options.bidirectional ?? false,
       occlude: options.occlude ?? true,
       completionName,

@@ -3300,18 +3300,22 @@ function createServerWithCatalog(
     await journaled("raise-surface-degree", purpose, { faces }, () => session.get().raiseSurfaceDegree(faces, current)));
   tool("plasticity_untrim_faces", "Restore selected current Solid or Sheet faces to the natural bounds of their carrier surfaces in one native history entry. The selected trim boundaries are discarded, the result can overlap neighboring geometry, and all topology references become stale; inspect surface structure, bounds, validation, and intersections before continuing.", z.object({ faces: surfaceFaceRefs, intent, revision }).strict(), async ({ faces, intent: purpose, revision: current }) =>
     await journaled("untrim-faces", purpose, { faces }, () => session.get().untrimFaces(faces, current)));
-  tool("plasticity_imprint_curves_on_body", "Project native Wire bodies onto a Solid or Sheet and split its exact faces along the projected curves.", z.object({
+  tool("plasticity_imprint_curves_on_body", "Project native Wire bodies onto a Solid or Sheet and split its faces. projectionMethod=vector (default) requires direction and may produce approximated SPCurve edges, including for circles. projectionMethod=normal uses native surface-normal projection and requires direction to be omitted; it preserves analytic circles in the qualified planar cases. Normal projection has different geometry semantics; it is never selected automatically.", z.object({
     targetId: z.number().int().positive(),
     curveIds: ids,
-    direction,
+    direction: direction.optional(),
+    projectionMethod: z.enum(["vector", "normal"]).default("vector"),
     bidirectional: z.boolean().default(false),
     occlude: z.boolean().default(true),
     completion: z.enum(["none", "edge", "face-set"]).default("none"),
     intent,
     revision,
-  }).strict(), async ({ targetId, curveIds, direction: imprintDirection, bidirectional, occlude, completion, intent: purpose, revision: current }) =>
-    await journaled("imprint-curves-on-body", purpose, { targetId, curveIds, direction: imprintDirection, bidirectional, occlude, completion }, () =>
-      session.get().imprintCurvesOnBody(targetId, curveIds, imprintDirection, { bidirectional, occlude, completion }, current)));
+  }).strict().superRefine((input, context) => {
+    if (input.projectionMethod === "vector" && input.direction === undefined) context.addIssue({ code: "custom", path: ["direction"], message: "Vector imprint requires direction" });
+    if (input.projectionMethod === "normal" && input.direction !== undefined) context.addIssue({ code: "custom", path: ["direction"], message: "Normal imprint requires direction to be omitted" });
+  }), async ({ targetId, curveIds, direction: imprintDirection, projectionMethod, bidirectional, occlude, completion, intent: purpose, revision: current }) =>
+    await journaled("imprint-curves-on-body", purpose, { targetId, curveIds, direction: imprintDirection, projectionMethod, bidirectional, occlude, completion }, () =>
+      session.get().imprintCurvesOnBody(targetId, curveIds, imprintDirection, { projectionMethod, bidirectional, occlude, completion }, current)));
   tool("plasticity_imprint_bodies", "Split a Solid or Sheet target along exact intersections with preserved Solid or Sheet tool bodies.", z.object({ targetId: z.number().int().positive(), toolIds: ids, intent, revision }).strict(), async ({ targetId, toolIds, intent: purpose, revision: current }) =>
     await journaled("imprint-bodies", purpose, { targetId, toolIds }, () => session.get().imprintBodies(targetId, toolIds, current)));
   tool("plasticity_sweep_regions", "Sweep one or more explicit closed Regions along a native Wire spine to create exact Solid geometry.", z.object({

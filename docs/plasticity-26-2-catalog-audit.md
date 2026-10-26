@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #22
-(`96bcb4163e61a8fd6d8972a429500219911d176b`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #23
+(`119998b053adf61bed934fc8e3aff3bc29727852`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,10 +29,10 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 141 | 149 |
+| Completed passing fixtures | 143 | 151 |
 | Failing or blocked fixtures | 12 | 10 |
-| Tools with success in an application-connected passing fixture | 259 | 301 |
-| Tools attempted only in unaccepted fixtures | 4 | 2 |
+| Tools with success in an application-connected passing fixture | 260 | 302 |
+| Tools attempted only in unaccepted fixtures | 3 | 1 |
 | Tools without a recorded application-connected live call | 108 | 68 |
 
 The different counts reflect the executed scenarios, not a claim that the
@@ -252,6 +252,9 @@ Linear tolerance is 0.00001 mm and volume tolerance is 0.0001 mm³. Native
 body-body imprint is independently checked as preparation for dissolve.
 
 ### Unaccepted circular curve imprint
+
+This initial vector-projection result remains unaccepted. The later normal
+projection cases below use an explicitly different method.
 
 The R2 source circle at [5,5,15] mm projected along −Z onto a 10 mm cube
 committed a native-valid 7-face/13-edge Solid with all seven carriers reported
@@ -771,3 +774,43 @@ Circle-imprint, legacy strict bounds and other viewport/manual gaps remain open.
 Automated checks: 1467 root tests and typecheck pass; catalog counts, fixture
 references and `git diff --check` pass. Both experimental documents finish
 empty and idle. Installed application and security settings were unchanged.
+
+
+## Explicit normal projection for circular imprint
+
+The vector failure reproduces on both copies: volume 999.9996120023484 mm³,
+SPCurve edge, native validity success. Current 26.2.1 native-extrema body bounds
+are exactly 0..10 mm, while 26.1.3 FindBox still reaches Z=10.05 mm. Thus the
+new bounds method resolves the conservative box discrepancy on 26.2.1, but does
+not fix the vector path's curve representation or mass-property gate. A separate
+temporary native diagnostic on each version sampled 65 parameters and found
+maximum radial deviation 0.0004144400782291058 mm from R2 (sampled Z=10 mm).
+This is sampled evidence, not a continuous error certificate or accepted MCP
+coverage.
+
+The adapter now exposes explicit `projectionMethod: normal` for curve imprint.
+Existing calls retain default `vector` and their required nonzero direction.
+Normal projection requires direction to be omitted; contradictory/missing
+inputs reject before mutation. Native normal projection preserved analytic
+circles in the aligned and 30-degree rotated planar fixtures: **2/2 passed on
+each version**. There is no automatic method substitution or general claim
+that normal and vector projection have identical semantics.
+
+The normal cases retain the original 0.0001 mm³ volume and 0.00001 mm linear
+gates. They check native validation, 7-face/13-edge topology, exact Circle
+radius/center/circumference and normal, known world bounds, source preservation,
+Undo to the source snapshot, Redo with stable result IDs and geometry checked
+again, empty-scene restoration, and exact durable-history counts/synchronization
+including the selected projection method. Test stores are isolated. See
+[the method contract and repeatable cases](curve-imprint-projection.md).
+
+The original failed vector fixture remains in the matrix; the two new normal
+variants qualify their explicit inputs. Accepted coverage becomes 302/371 tools
+on 26.2.1 and 260/371 on 26.1.3. Rendered-viewport, manual gesture and legacy
+strict STEP/channel bounds gaps remain unaccepted. Both experimental scenes
+finish empty and idle, with installed Plasticity and security settings unchanged.
+
+Validation: 1468 root tests, 23 Workbench web tests and 90 Workbench server tests
+pass; both typechecks pass,
+and Workbench builds. Its existing advisory about chunks larger than 500 kB
+remains. Catalog consistency and `git diff --check` pass.
