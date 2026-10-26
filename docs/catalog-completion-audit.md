@@ -76,8 +76,12 @@ read-only reconciliation confirms both native scenes empty and idle.
 2. PR #35 review and both checks on head
    `2e1ad0b33734bdcdf08ef6ce85a56831f68cce2e` passed; it is merged as
    `d93130396a5c22aa787127be9ea02e183b4b3861`. Its local 1520 root tests and
-   typecheck passed. The focus-helper/disposition continuation needs its own
-   review/CI; no unrun or failed workflow becomes a pass.
+   typecheck passed. PR #36 is also merged as
+   `168a16a3c63895b7fd9fc32e3ece410c2010eb85`: its first PR check failed in
+   the existing AbortSignal case, and one rerun passed. The deterministic
+   [cancellation regression](codex-cancellation-qualification.md) fixes that
+   independently reproduced race; 1522 local tests and typecheck pass. Its final
+   review/CI is pending. No unrun or failed workflow becomes a pass.
 3. Keep the two-interface nonlinear limitation explicit. Catalog coverage is
    complete, but the full goal remains active; new solver physics or universal
    background-window freshness are not implied by fixture coverage.

@@ -5,8 +5,17 @@ import { createInterface } from "node:readline";
 
 const options = parseArgs(process.argv.slice(2));
 let turnId = "turn-1";
+let heldTurnRequestId: unknown;
 
-process.on("SIGTERM", () => finish(0));
+process.on("SIGTERM", () => {
+  if (heldTurnRequestId !== undefined) {
+    record("late-turn/start-response");
+    // Deliver a real late response only after the client begins closing.
+    process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: heldTurnRequestId, result: { turn: { id: turnId } } })}\n`, () => finish(0));
+    return;
+  }
+  finish(0);
+});
 process.on("SIGINT", () => finish(0));
 process.on("exit", () => {
   if (options.exitRecord) writeFileSync(options.exitRecord, "exited\n", { flag: "a" });
@@ -39,6 +48,10 @@ lines.on("line", (line) => {
       notify("item/completed", { threadId: "thread-1", turnId, item: { id: "item-1", type: "agentMessage", text: output } });
       notify("turn/completed", { threadId: "thread-1", turn: { id: turnId, status: "completed" } });
       respond(message.id, { turn: { id: turnId } });
+      return;
+    }
+    if (options.mode === "late-turn-id-on-close") {
+      heldTurnRequestId = message.id;
       return;
     }
     respond(message.id, { turn: { id: turnId } });
