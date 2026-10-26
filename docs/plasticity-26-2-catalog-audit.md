@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #34
-(`2e35ca8dcda1c810c2497267b82292e9b5f87445`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #35
+(`d93130396a5c22aa787127be9ea02e183b4b3861`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -30,7 +30,7 @@ and raw runtime dumps are excluded from the checked-in matrix.
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
 | Completed passing fixtures | 182 | 184 |
-| Failing or blocked fixtures | 14 | 18 |
+| Failing or blocked fixtures | 14 | 21 |
 | Tools with success in an application-connected passing fixture | 371 | 371 |
 | Tools attempted only in unaccepted fixtures | 0 | 0 |
 | Tools without a recorded application-connected live call | 0 | 0 |
@@ -1207,3 +1207,14 @@ retained categories; direct mouse-edit acceptance still needs a real window.
 Local gates for this continuation: 1520 root tests and `npm run typecheck` pass.
 CI/merge status must be checked against the final PR head. The catalog-completion
 goal remains active; see the [remaining gates](catalog-completion-audit.md).
+
+## Direct mouse-edit continuation
+
+[Current UI qualification](direct-ui-edit-qualification.md) adds a verified macOS
+focus/return helper and retains three additional unaccepted modern UI attempts.
+User-confirmed extra Fillet Shell edits were preserved; later selection/gizmo
+attempts committed no move. An empty-scene pointer diagnostic observed trusted
+pointerdown with buttons=1 followed by motion with buttons=0, so it does not
+qualify held-button drag. Its temporary observer was removed. No new tool coverage
+is claimed: 371/371 remains fixture coverage on each version. The clean one-move
+manual fixture and corresponding legacy run are still pending.
