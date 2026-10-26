@@ -54,6 +54,8 @@ Current dispositions are linked below; unresolved numerical/UI limits remain exp
 | `stale-window-html-pixels` | 1 | 1 |
 | `step-import-nominal-bounds-gate` | 0 | 1 |
 | `thread-envelope-and-fractional-helix-gate` | 3 | 3 |
+| `ui-fixture-interrupted-user-edits` | 1 | 0 |
+| `ui-move-not-committed` | 2 | 0 |
 | `unsupported-fractional-turns` | 2 | 2 |
 | `viewport-unavailable` | 3 | 3 |
 
@@ -65,14 +67,17 @@ versions at instant 97 with a nonlinear CPU-limit error. The final legacy run
 also verifies persisted primary solver diagnostics and guarded four-step cleanup;
 read-only reconciliation confirms both native scenes empty and idle.
 
-1. Complete direct mouse-edit acceptance on both experimental copies. It remains
-   unverified: CUA returned `noWindowsAvailable`; a request for foreground focus
-   is pending. The verifier now isolates stores and fences cleanup by exact
-   document/revision/body ownership and at most two owned history steps, covered
-   by regression tests. A simulated or MCP-generated move is not UI evidence.
-2. Complete review/CI for the final continuation and merge the verified changes.
-   Local final gates: 1520 root tests and typecheck pass. No unrun or failed
-   workflow becomes a pass.
+1. Complete direct mouse-edit acceptance on both experimental copies. The
+   [direct UI qualification](direct-ui-edit-qualification.md) records the current
+   state: exact focus/return is now automated and verified, but an observed CUA
+   drag delivered motion with `buttons=0`. It is not held-button mouse evidence.
+   A clean manual one-move fixture on 26.2.1 is waiting for a human gesture;
+   the corresponding 26.1.3 fixture follows only after it completes.
+2. PR #35 review and both checks on head
+   `2e1ad0b33734bdcdf08ef6ce85a56831f68cce2e` passed; it is merged as
+   `d93130396a5c22aa787127be9ea02e183b4b3861`. Its local 1520 root tests and
+   typecheck passed. The focus-helper/disposition continuation needs its own
+   review/CI; no unrun or failed workflow becomes a pass.
 3. Keep the two-interface nonlinear limitation explicit. Catalog coverage is
    complete, but the full goal remains active; new solver physics or universal
    background-window freshness are not implied by fixture coverage.

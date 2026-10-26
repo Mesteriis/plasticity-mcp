@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "date": "2026-10-26",
   "baseCommit": "8648937d15620576e36eb6efa25694cd08c8015d",
-  "continuationBaseCommit": "2e35ca8dcda1c810c2497267b82292e9b5f87445",
+  "continuationBaseCommit": "d93130396a5c22aa787127be9ea02e183b4b3861",
   "catalogSize": 371,
   "scope": "Production stdio MCP and explicit native-operation fixtures against separate disposable app copies. Per-tool coverage requires actual stdio calls. A tool success alone is not a guarantee for every argument or workflow.",
   "limitations": ["Counts exclude tool successes from failing fixtures and exclude metadata-only probes.","Geometry-only measurements do not verify viewport rendering.","Unobserved tools are not accepted by this audit, including external services, solvers and manufacturing integrations.","Earlier successful PR #12 scenarios remain separate historical evidence; a current viewport failure is not relabeled as a pass.","Version coverage requires application-connected fixtures. Host-only fixture coverage is recorded separately.","Appearance and section lifecycle fixtures validate native data and history, not rendered pixels; screenshot/manual fixtures remain separate.","Native-viewport fixtures verify freshly rendered WebGL pixels, not HTML labels, CSS panels/backgrounds or operating-system window visibility. Default window capture retains its hidden-renderer guard.","HTML measurement fixtures verify DOM text, style, viewport attachment and projected anchors, not rasterized HTML glyphs or full-window pixels. Native measurement names are preserved inside move/rotate/scale item commands; other command families and file serialization are outside this name-persistence qualification. External window review remains unaccepted when captured glyph pixels are stale."],
@@ -214,7 +214,7 @@
     },
     "26.2.1": {
       "passedFixtures": 184,
-      "failedFixtures": 18,
+      "failedFixtures": 21,
       "toolCounts": {"accepted-fixture": 371},
       "fixtures": [
         {"script": "scripts/verify-arbitrary-section-live.ts","status": "passed","id": "f01"},
@@ -418,7 +418,10 @@
         {"script": "scripts/verify-strength-catalog-live.ts","variant": "coupon-root","status": "passed","id": "f199"},
         {"script": "scripts/verify-strength-catalog-live.ts","variant": "scenarios","status": "passed","id": "f200"},
         {"script": "scripts/verify-strength-catalog-live.ts","variant": "thread-registry","status": "passed","id": "f201"},
-        {"script": "scripts/verify-strength-live.ts","variant": "live-codex-text","status": "passed","id": "f202"}
+        {"script": "scripts/verify-strength-live.ts","variant": "live-codex-text","status": "passed","id": "f202"},
+        {"script": "scripts/verify-native-ui-edits-live.ts","variant": "direct-mouse-cua-input-no-commit","status": "failed","failureCategory": "ui-move-not-committed","id": "f203"},
+        {"script": "scripts/verify-native-ui-edits-live.ts","variant": "direct-mouse-interrupted-user-edits","status": "failed","failureCategory": "ui-fixture-interrupted-user-edits","id": "f204"},
+        {"script": "scripts/verify-native-ui-edits-live.ts","variant": "direct-mouse-navigation-no-commit","status": "failed","failureCategory": "ui-move-not-committed","id": "f205"}
       ]
     }
   },
