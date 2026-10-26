@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #25
-(`1d2ae12e4b6eed2c3c2213e8d29fec3c010c9b55`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #29
+(`9b38b3107008510fe1492154eff245298aa38cfc`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 147 | 155 |
-| Failing or blocked fixtures | 12 | 10 |
-| Tools with success in an application-connected passing fixture | 266 | 303 |
+| Completed passing fixtures | 161 | 169 |
+| Failing or blocked fixtures | 13 | 13 |
+| Tools with success in an application-connected passing fixture | 278 | 314 |
 | Tools attempted only in unaccepted fixtures | 0 | 0 |
-| Tools without a recorded application-connected live call | 105 | 68 |
+| Tools without a recorded application-connected live call | 93 | 57 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -1045,3 +1045,27 @@ tests, typecheck, matrix consistency and diff checks pass. Both scenes finish
 empty and idle; installed apps/settings/security are unchanged. Direct-file
 acceptance does not qualify ZIPs, binary Parasolid, arbitrary assemblies,
 asset discovery, rendering or manufacturing accuracy.
+
+## Read-only reference discovery
+
+PR #29 is merged. Three guarded production stdio cases pass on each experimental
+version: search-provider status, the selected official Radxa hardware page's
+asset listing and a fixed known-page live search. The host tools are qualified
+with explicit application connections and native scene/history no-change checks,
+not CAD geometry or download assertions. Both copies finish empty and idle.
+
+[Discovery scope, source and repeatable commands](reference-discovery-qualification.md)
+explain the exact HTTPS domain/format/link gates and isolation. Search returns
+one manufacturer page with unknown licensing, no dimensional evidence and no
+verified direct asset URLs; the separate HTML listing exposes STEP-archive,
+text-Parasolid and PDF links. No archive/model is downloaded or imported. An
+off-domain page is rejected. The initial broad 120-second search timeout remains
+a separate failed fixture; the narrower 180-second request passes on both versions
+and does not prove the cause of the first timeout or general search reliability.
+An authored format-name mismatch was corrected in the verifier, without changing
+the production classifier or security profile.
+
+Coverage is 314/371 modern and 278/371 legacy, with three additional passing
+fixtures per version and the additional modern timeout retained. 1498 root
+tests, typecheck, catalog count/reference consistency and diff checks pass.
+The installed applications, settings and security protections are unchanged.
