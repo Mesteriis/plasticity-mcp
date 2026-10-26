@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #33
-(`b0b23fefbd3b29ada6889dd7ac10f4ee4e28f6f0`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #34
+(`2e35ca8dcda1c810c2497267b82292e9b5f87445`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 175 | 177 |
-| Failing or blocked fixtures | 13 | 16 |
-| Tools with success in an application-connected passing fixture | 349 | 349 |
+| Completed passing fixtures | 182 | 184 |
+| Failing or blocked fixtures | 14 | 18 |
+| Tools with success in an application-connected passing fixture | 371 | 371 |
 | Tools attempted only in unaccepted fixtures | 0 | 0 |
-| Tools without a recorded application-connected live call | 22 | 22 |
+| Tools without a recorded application-connected live call | 0 | 0 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -1177,3 +1177,33 @@ No installed application or system settings/security were changed.
 Legacy coverage rises by 36 tools: both versions now have 349/371 accepted tools
 and 22 pending. Earlier failed evidence is preserved. 1513 root tests, typecheck,
 catalog consistency and diff checks pass. The full-catalog objective remains active.
+
+## Strength, solver and live analysis continuation
+
+The [qualification details](strength-fem-catalog-qualification.md) record three
+remaining strength/registry cases, actual static and one-interface cohesive
+solves, overlapping-mesh report comparison and live unscaled analysis on both
+experimental versions. All 371 catalog tools now have a successful call in a
+completed passing fixture on each copy. This does not accept all arguments or
+turn diagnostics into physical strength/print approval.
+
+Both live strength interviews and the two-view synthetic design-reference case
+pass with immutable request persistence across MCP restart and appropriate native
+scene/history assertions. A sourced absence of dimensions is valid evidence;
+verification uses structural scale/method/measurement invariants rather than
+requiring an English wording. Owned synthetic PNG input views are not viewport
+capture evidence.
+
+The full two-interface orthotropic bracket failed on both versions. Byte-identical
+solver input replay independently reproduced the nonlinear CPU-limit error near
+pseudo-time 0.97. That failure remains separate from accepted single-interface
+coverage. Diagnostic output is now retained in each owned job directory, and an
+early severe error is included with the shutdown tail in failure summaries.
+No solver tolerance, load or resource cap was relaxed. The legacy run independently retains the same CPU-limit diagnostic and restores
+its empty scene with four owned Undo steps. The
+[failure disposition audit](catalog-failure-dispositions.md) reconciles all
+retained categories; direct mouse-edit acceptance still needs a real window.
+
+Local gates for this continuation: 1520 root tests and `npm run typecheck` pass.
+CI/merge status must be checked against the final PR head. The catalog-completion
+goal remains active; see the [remaining gates](catalog-completion-audit.md).

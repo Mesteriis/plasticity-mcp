@@ -32,3 +32,9 @@ test("design-reference image acceptance accepts one to four absolute image paths
     images: ["/tmp/front.heic", "/tmp/side.heif"],
   });
 });
+
+test("design-reference acceptance optionally binds an explicit application target", () => {
+  const options = parseMultiviewAcceptanceArgs(["--live-codex", "--target", "experimental", "--output", "/tmp/new", "--image", "/tmp/synthetic.png"]);
+  assert.equal(options.target, "experimental");
+  assert.throws(() => parseMultiviewAcceptanceArgs(["--target", "--live-codex"]), /explicit window ID/);
+});

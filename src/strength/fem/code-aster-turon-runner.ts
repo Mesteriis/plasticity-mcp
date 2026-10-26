@@ -68,14 +68,25 @@ export async function runCodeAsterTuronCase(
   const commandPath = join(workspace, "turon3d.comm");
   const exportPath = join(workspace, "turon3d.export");
   const medPath = join(workspace, "result.med");
-  await ensureDoesNotExist([verifierPath, commandPath, exportPath, medPath]);
+  const outputLogPath = join(workspace, "solver-output.log");
+  await ensureDoesNotExist([verifierPath, commandPath, exportPath, medPath, outputLogPath]);
   await Promise.all([
     copyFile(MED_VERIFIER.pathname, verifierPath, constants.COPYFILE_EXCL),
     writeFile(commandPath, deck.commandFile, { flag: "wx", mode: 0o600 }),
     writeFile(exportPath, deck.exportFile, { flag: "wx", mode: 0o600 }),
   ]);
 
-  const processOutput = await executeDocker(workspace, request.signal);
+  let processOutput: { code: number | null; output: string };
+  try {
+    processOutput = await executeDocker(workspace, request.signal);
+  } catch (error) {
+    if (isRecord(error) && typeof error.solverOutput === "string") {
+      try { await writeFile(outputLogPath, error.solverOutput, { flag: "wx", mode: 0o600 }); }
+      catch (logError) { throw new Error(`${error instanceof Error ? error.message : String(error)}; diagnostic log could not be saved: ${logError instanceof Error ? logError.message : String(logError)}`, { cause: error }); }
+    }
+    throw error;
+  }
+  await writeFile(outputLogPath, processOutput.output, { flag: "wx", mode: 0o600 });
   assertSuccessful(processOutput.code, processOutput.output);
   const medStat = await stat(medPath);
   if (!medStat.isFile() || medStat.size < 1_000 || medStat.size > MAX_MED_BYTES) {
@@ -177,10 +188,16 @@ export function parseCodeAsterTuronDamageSummary(value: unknown): {
   return { finalTime: final.time, maxDamageV3: final.maxDamageV3, maxStateV5: final.maxStateV5, damageHistory: history };
 }
 
+export function formatCodeAsterTuronFailureOutput(output: string): string {
+  const severe = /<(?:F|S)>_|<EXCEPTION>|Traceback|\b\w*Error\b|limite[^\n]*temps/i.exec(output);
+  if (!severe) return output.slice(-4_000);
+  return `${output.slice(Math.max(0, severe.index - 150), severe.index + 2_800)}\nFinal output:\n${output.slice(-1_000)}`;
+}
+
 function assertSuccessful(exitCode: number | null, output: string): void {
-  if (exitCode !== 0) throw new Error(`Code_Aster 17.4 container exited with code ${exitCode ?? "unknown"}: ${output.slice(-4_000)}`);
+  if (exitCode !== 0) throw new Error(`Code_Aster 17.4 container exited with code ${exitCode ?? "unknown"}: ${formatCodeAsterTuronFailureOutput(output)}`);
   if (/<(?:F|S)>_/i.test(output) || /<S>_NO_CONVERGENCE/.test(output)) {
-    throw new Error(`Code_Aster 17.4 Turon run contains a severe diagnostic or non-convergence: ${output.slice(-4_000)}`);
+    throw new Error(`Code_Aster 17.4 Turon run contains a severe diagnostic or non-convergence: ${formatCodeAsterTuronFailureOutput(output)}`);
   }
   if (!/EXECUTION_CODE_ASTER_EXIT_\d+=0/.test(output)) throw new Error("Code_Aster 17.4 output is missing its solver success marker");
 }
@@ -218,8 +235,8 @@ async function executeDocker(workspace: string, signal?: AbortSignal): Promise<{
     child.once("close", (code) => {
       clearTimeout(timeout);
       signal?.removeEventListener("abort", abort);
-      if (signal?.aborted) reject(new Error("Code_Aster Turon job was cancelled"));
-      else if (timedOut) reject(new Error("Code_Aster Turon job timed out"));
+      if (signal?.aborted) reject(Object.assign(new Error("Code_Aster Turon job was cancelled"), { solverOutput: output }));
+      else if (timedOut) reject(Object.assign(new Error("Code_Aster Turon job timed out"), { solverOutput: output }));
       else resolveJob({ code, output });
     });
   });

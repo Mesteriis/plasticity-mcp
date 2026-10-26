@@ -10,6 +10,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 import type { Evidence, StrengthInput } from "../src/strength/contracts.ts";
 
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const LIVE_CODEX_TIMEOUT_MS = 180_000;
@@ -86,6 +89,20 @@ export function strengthSketchPrompt(imageAttached: boolean): string {
     : "No image is attached in this text-only acceptance case. Analyze the described synthetic unscaled concept sketch of a gusseted mounting bracket without assuming exact scale or dimensions or treating it as a constant rectangular member. Ask at most one next-step question package, starting with what it supports, expected load/use and mounting; defer section, material/process and displacement until the answer narrows the next decision.";
 }
 
+export function preservesUnscaledReference(result: {
+  observations: Array<{ label: string; status: string; unit?: string; value?: number; range?: number[] }>;
+  questions: Array<{ question: string }>;
+  proposedMethod?: string | null;
+  designInterpretation?: { scaleStatus?: string } | null;
+}): boolean {
+  if (result.proposedMethod !== null || result.observations.length === 0 || result.questions.length > 1) return false;
+  const scaleStatus = result.designInterpretation?.scaleStatus;
+  if (scaleStatus && !["unscaled", "unknown"].includes(scaleStatus)) return false;
+  return !result.observations.some(item =>
+    (["mm", "mm2", "mm4"].includes(item.unit ?? "") && (typeof item.value === "number" || item.range !== undefined))
+    || /\b\d+(?:\.\d+)?\s*(?:mm|millimet)/i.test(item.label));
+}
+
 export function isDisposableEmptyDocument(state: unknown): boolean {
   if (!isRecord(state) || state.undoDepth !== 0 || state.redoDepth !== 0) return false;
   for (const key of ["bodies", "regions", "instances", "referenceMeshes", "measurements", "sectionAnalyses"] as const) {
@@ -150,9 +167,7 @@ async function main(): Promise<void> {
     };
     const analysis = await call(live.client, "plasticity_analyze_strength_task", analysisRequest, LIVE_CODEX_TIMEOUT_MS);
     requireCondition(analysis.state === "completed", `Live analysis did not complete: ${analysis.state}`);
-    const unknownScale = analysis.result.observations.some((item: { status: string; label: string }) =>
-      item.status === "unknown" && /scale|dimension|size/i.test(item.label)
-    ) || analysis.result.questions.some((item: { question: string }) => /dimension|length|width|height|distance|scale/i.test(item.question));
+    const unknownScale = preservesUnscaledReference(analysis.result);
     requireCondition(unknownScale, "Structured analysis did not preserve unknown scale");
     requireCondition(analysis.result.questions.length === 1, "Unscaled bracket analysis must ask exactly one next-step question package");
     evidence.codex = {
@@ -173,6 +188,7 @@ async function main(): Promise<void> {
       answers: [{ questionId: firstQuestion.id, question: firstQuestion.question, answer: followupAnswer }],
     }, LIVE_CODEX_TIMEOUT_MS);
     requireCondition(followup.state === "completed", `Follow-up analysis did not complete: ${followup.state}`);
+    requireCondition(preservesUnscaledReference(followup.result), "Follow-up lost unknown scale or invented a dimensional model");
     requireCondition(followup.result.questions.length === 1, "Follow-up must ask exactly one focused next-step question package");
     requireCondition(followup.result.questions[0].id !== firstQuestion.id, "Follow-up repeated the previous unresolved question ID");
     evidence.interview = {
@@ -409,12 +425,13 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && initialState && !evidence.cleanup) {
+    if (live && initialState && !evidence.cleanup && permitsNativeFailureRecovery(error)) {
       evidence.cleanup = await recoverDisposableScene(live.client, initialState).catch((cleanupError) => ({
         restoredEmptyDocument: false,
         reason: boundedError(cleanupError),
       }));
     }
+    if (!permitsNativeFailureRecovery(error)) evidence.cleanup = { restoredEmptyDocument: false, reason: "uncertain-outcome-read-only-inspection-required" };
     await writeExclusive(join(output, "failure.json"), evidence).catch(() => {});
     throw error;
   } finally {
@@ -447,10 +464,9 @@ export async function startMcp(storeRoot: string, assetRoot: string): Promise<Li
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
     env: {
+      ...isolatedAcceptanceEnvironment(storeRoot, process.env),
       ...selectedEnvironment(process.env),
-      PLASTICITY_STRENGTH_ROOT: storeRoot,
       PLASTICITY_STRENGTH_ASSET_ROOT: assetRoot,
-      PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223",
     },
     stderr: "pipe",
   });

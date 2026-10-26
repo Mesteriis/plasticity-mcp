@@ -6,6 +6,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
+import { hydrateNativeState } from "./native-live-state.ts";
+
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureUrl = "https://example.test/synthetic-acceptance-only";
 const hash = (n: number) => n.toString(16).padStart(64, "0");
@@ -45,25 +50,22 @@ async function main(): Promise<void> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: {
-      ...selectedEnvironment(process.env),
-      PLASTICITY_STRENGTH_ROOT: join(output, "strength-store"),
-      PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223",
-    },
+    env: isolatedAcceptanceEnvironment(join(output, "strength-store"), process.env),
     stderr: "pipe",
   });
   const client = new Client({ name: "plasticity-cohesive-mixed-mode-acceptance", version: "1.0.0" });
-  const evidence: Record<string, unknown> = { schemaVersion: 1, startedAt: new Date().toISOString(), plasticityVersion: "26.1.3", fixture: "single-material orthotropic box with an oblique mixed-mode layer interface" };
+  const evidence: Record<string, unknown> = { schemaVersion: 1, startedAt: new Date().toISOString(), targetSelection: "explicit", fixture: "single-material orthotropic box with an oblique mixed-mode layer interface" };
   let acceptanceResult: Record<string, unknown> | undefined;
   let initial: any;
   let revision: string | undefined;
   let ownedUndoSteps = 0;
+  let recoveryAllowed = true;
   try {
     await client.connect(transport);
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((w: { targetId: string }) => w.targetId === options.target), "Explicit Plasticity window was not found");
     initial = await call(client, "plasticity_connect", { targetId: options.target });
-    requireCondition(initial.bodies.length === 0 && initial.regions.length === 0, "Refusing live acceptance in a nonempty document");
+    requireCondition(isDisposableEmptyDocument(initial), "Refusing live acceptance in a nonempty document");
     revision = initial.revision;
 
     const boxResult = await call(client, "plasticity_create_box", {
@@ -92,7 +94,7 @@ async function main(): Promise<void> {
     requireCondition(support && loaded, "Could not identify exact native support and load faces");
     const process = {
       printerId: "synthetic-acceptance-printer", materialId: "synthetic-acceptance-single-material", profileHash: "a".repeat(64),
-      orientationDeg: [0, 45, 0], infillPercent: 100, nozzleTemperatureC: 220, layerHeightMm: 0.2,
+      orientationDeg: [0, 45, 0], infillPercent: 100, infillPattern: "grid", wallLoops: 2, topShellLayers: 5, bottomShellLayers: 3, nozzleTemperatureC: 220, layerHeightMm: 0.2,
     };
     const orthotropic = {
       youngsModulus2MPa: 1_800, youngsModulus3MPa: 900, poissonRatio13: 0.22, poissonRatio23: 0.26,
@@ -125,17 +127,15 @@ async function main(): Promise<void> {
     const enf = await recordCurve(client, process, "interface-shear", layerNormal, layerTangent, 2, 0, 0.4, 0.04);
     const mmb25 = await recordMixedModeCurve(client, process, 3, 0.25, layerNormal, layerTangent);
     const mmb75 = await recordMixedModeCurve(client, process, 4, 0.75, layerNormal, layerTangent);
+    const calibration = await call(client, "plasticity_calibrate_turon_mixed_mode_law", { modeIRecordId: dcb, modeIIRecordId: enf, mixedModeRecordIds: [mmb25, mmb75] });
+    requireCondition(calibration.interpretation === "candidate-calibration-requires-engineering-review" && Math.abs(calibration.etaBk - 2) < 1e-8, "Synthetic independent BK exponent was not recovered");
+    const planePlan = await call(client, "plasticity_plan_cohesive_layer_planes", { processProfileHash: process.profileHash, firstInterfacePointMm: layerNormal.map(c => c * 5), buildDirectionGlobal: layerNormal, layerHeightMm: 0.2, totalLayerCount: 2, interfaceLayerIndices: [1] });
+    requireCondition(planePlan.planes.length === 1 && planePlan.coverage === "all-layer-interfaces", "Layer plane planner lost the complete synthetic interface");
+    evidence.calibration = calibration; evidence.planePlan = planePlan;
     const response = await call(client, "plasticity_analyze_cohesive_interface", {
       bodyId: box.id, revision, interfaceTestRecordId: dcb,
-      splitPlanes: [{ pointMm: layerNormal.map((component) => component * 5), normalGlobal: layerNormal }],
-      layerPlanePlan: {
-        processProfileHash: process.profileHash,
-        firstInterfacePointMm: layerNormal.map((component) => component * 5),
-        buildDirectionGlobal: layerNormal,
-        layerHeightMm: 0.2,
-        totalLayerCount: 2,
-        interfaceLayerIndices: [1],
-      },
+      splitPlanes: planePlan.planes,
+      layerPlanePlan: planePlan.plan,
       supportFaceId: support.id, loadedFaceId: loaded.id, meshSizeMm: 10,
       poissonRatio: 0.3, poissonRatioEvidence: nu12Evidence,
       useOrthotropicBulkProperties: true, modeIIRecordId: enf, mixedModeRecordIds: [mmb25, mmb75],
@@ -158,10 +158,12 @@ async function main(): Promise<void> {
     evidence.result = result;
     acceptanceResult = result;
   } catch (error) {
+    recoveryAllowed = permitsNativeFailureRecovery(error);
     evidence.failure = error instanceof Error ? error.message : String(error);
     throw error;
   } finally {
-    if (initial) {
+    if (!recoveryAllowed) evidence.cleanup = { restoredEmptyDocument: false, reason: "uncertain-outcome-read-only-inspection-required" };
+    if (initial && recoveryAllowed) {
       try {
         const state = await call(client, "plasticity_status", {});
         if (ownedUndoSteps > 0 && state.documentToken === initial.documentToken && state.revision === revision) {
@@ -191,7 +193,7 @@ async function recordCurve(client: Client, process: Record<string, unknown>, tes
     { separationMm: 2 * energy / peak, tractionMPa: 0 },
   ];
   const record = await call(client, "plasticity_record_material_interface_test", {
-    materialProcess: process, testMode,
+    materialProcess: process, testMode, fractureMethod: testMode === "normal-tension" ? "dcb-mode-i" : "enf-mode-ii",
     interfaceNormalGlobal: normal, loadDirectionGlobal: direction,
     testMethod: `Synthetic ${testMode === "normal-tension" ? "DCB" : "ENF"} cohesive integration fixture`,
     testProtocolHash: hash(index + 100), specimenDescription: "Synthetic software-acceptance fixture only.", fixtureDescription: "Not a physical test.",
@@ -224,7 +226,7 @@ async function recordMixedModeCurve(
   const directionNorm = Math.hypot(normalDirection, tangentDirection);
   const peak = Math.hypot(normalPeak, tangentialPeak);
   const record = await call(client, "plasticity_record_material_interface_test", {
-    materialProcess: process, testMode: "mixed-mode",
+    materialProcess: process, testMode: "mixed-mode", fractureMethod: "mmb-mixed-mode",
     interfaceNormalGlobal: normal,
     loadDirectionGlobal: tangent.map((component, axis) => component * tangentDirection / directionNorm + normal[axis]! * normalDirection / directionNorm),
     testMethod: "Synthetic ASTM D6671 MMB cohesive integration fixture", testProtocolHash: hash(index + 100),
@@ -254,15 +256,13 @@ async function call(client: Client, name: string, args: Record<string, unknown>,
   const content = (response as { content: Array<{ type: string; text?: string }> }).content;
   const text = content.find((part) => part.type === "text")?.text ?? "";
   if (response.isError) throw new Error(text);
-  try { return JSON.parse(text); } catch { throw new Error(`${name} returned invalid JSON: ${text.slice(0, 2_000)}`); }
+  let decoded: any;
+  try { decoded = JSON.parse(text); } catch { throw new Error(`${name} returned invalid JSON: ${text.slice(0, 2_000)}`); }
+  return await hydrateNativeState(decoded, id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 function requireCondition(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
 
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
-  return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) =>
-    typeof environment[key] === "string" ? [[key, environment[key]!]] : []));
-}
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });

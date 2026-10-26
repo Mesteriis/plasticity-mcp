@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseCodeAsterTuronDamageSummary } from "./code-aster-turon-runner.ts";
+import { formatCodeAsterTuronFailureOutput, parseCodeAsterTuronDamageSummary } from "./code-aster-turon-runner.ts";
+
+test("Turon failure output retains the severe diagnostic before the long shutdown tail", () => {
+  const text = "start\n<EXCEPTION> <MECANONLINE9_83>\nNo convergence at increment 3\n" + "shutdown statistics\n".repeat(1000) + "MPI_ABORT\n";
+  const output = formatCodeAsterTuronFailureOutput(text);
+  assert.match(output, /No convergence at increment 3/);
+  assert.match(output, /MPI_ABORT/);
+  assert(output.length < 4100);
+  assert.equal(formatCodeAsterTuronFailureOutput("x".repeat(5000)).length, 4000);
+});
 
 const valid = {
   instant: 1,

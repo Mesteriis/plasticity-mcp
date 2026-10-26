@@ -19,48 +19,33 @@ A completed slice, green unit tests or a catalog count is not full completion.
 - Installed app bundles/settings/security and user CAD/data must remain untouched.
   Synthetic stores and owned disposable scenes are used for qualification.
 
-## Current remaining tool evidence
+## Current tool evidence
 
 Source: [machine-readable catalog audit](plasticity-26-2-catalog-audit.json).
-Current successful coverage is 349/371 on 26.2.1 and 349/371 on 26.1.3.
-The table is a backlog, not an acceptance waiver.
+Current successful coverage is **371/371 on both 26.2.1 and 26.1.3**.
+Every entry has at least one successful production stdio call in a completed
+passing application-connected fixture. This is fixture coverage, not universal
+argument/workflow acceptance or physical manufacturing qualification.
 
-| Tool | 26.2.1 | 26.1.3 |
-| --- | --- | --- |
-| `plasticity_analyze_cohesive_interface` | pending | pending |
-| `plasticity_analyze_design_reference` | pending | pending |
-| `plasticity_analyze_static_fem` | pending | pending |
-| `plasticity_analyze_strength_task` | pending | pending |
-| `plasticity_calculate_fastener_member_strength` | pending | pending |
-| `plasticity_calculate_heat_set_insert_retention` | pending | pending |
-| `plasticity_calculate_single_fastener_strength` | pending | pending |
-| `plasticity_calculate_tongue_root_strength` | pending | pending |
-| `plasticity_calculate_tongue_root_strength_from_coupon_data` | pending | pending |
-| `plasticity_calibrate_turon_mixed_mode_law` | pending | pending |
-| `plasticity_cohesive_fem_report` | pending | pending |
-| `plasticity_compare_static_fem_refinement_reports` | pending | pending |
-| `plasticity_design_reference_request` | pending | pending |
-| `plasticity_distribute_fastener_group_load` | pending | pending |
-| `plasticity_list_printed_thread_qualifications` | pending | pending |
-| `plasticity_match_printed_thread_qualification` | pending | pending |
-| `plasticity_plan_cohesive_layer_planes` | pending | pending |
-| `plasticity_record_printed_thread_qualification` | pending | pending |
-| `plasticity_static_fem_report` | pending | pending |
-| `plasticity_strength_methods` | pending | pending |
-| `plasticity_strength_request` | pending | pending |
-| `plasticity_verify_tongue_root_strength_from_coupon_data` | pending | pending |
+The [strength/FEM continuation](strength-fem-catalog-qualification.md) closes the
+remaining calculation, registry, actual solver/report-comparison and live
+Codex analysis/design-reference tool scenarios. The full two-interface bracket
+is separate and remains unaccepted. The same nonlinear CPU-limit failure is confirmed on both versions.
+Catalog coverage alone does not complete the goal.
 
-## Retained failures requiring final disposition audit
+## Retained failures and current dispositions
 
 These are historical failed fixtures, not all necessarily current product defects.
 Counts below preserve the evidence; fixes do not delete their original failures.
-Current unsupported/native/UI cases must still be assessed before completion.
+Current dispositions are linked below; unresolved numerical/UI limits remain explicit.
 
 | Failure category | 26.2.1 retained cases | 26.1.3 retained cases |
 | --- | ---: | ---: |
 | `ascii-stl-multiple-solids-rejected` | 1 | 0 |
+| `authored-fixture-contract-mismatch` | 1 | 0 |
 | `cantilever-method-deflection-limit` | 1 | 0 |
 | `circular-imprint-nominal-measurement-gate` | 1 | 1 |
+| `cohesive-two-interface-nonlinear-cpu-limit` | 1 | 1 |
 | `interactive-gesture-required` | 1 | 1 |
 | `mmb-arm-thickness-halved` | 1 | 0 |
 | `pipe-channel-nominal-bounds-gate` | 0 | 1 |
@@ -72,17 +57,22 @@ Current unsupported/native/UI cases must still be assessed before completion.
 | `unsupported-fractional-turns` | 2 | 2 |
 | `viewport-unavailable` | 3 | 3 |
 
-## Next execution order
+## Remaining completion gates
 
-1. Legacy native-operation coverage now matches modern coverage (349/371 each).
-   Keep corresponding native checks isolated and stop after uncertain outcomes.
-2. Exercise remaining calculation, printed-thread qualification and strength
-   request flows through production stdio with independent gates.
-3. Verify actual static/cohesive solver workflows, report freshness/refinement
-   and mixed-mode calibration. Synthetic diagnostics do not prove physical strength.
-4. Complete live analysis/design-reference checks without expanding capability
-   privileges or exporting user CAD; classify any external/runtime blockers.
-5. Reconcile all retained failures and repeat affected current checks, including
-   genuine full-window rendering where rendering is claimed.
-6. Audit every requirement against fresh outputs and merged CI before marking
-   the thread goal complete.
+The [failure disposition audit](catalog-failure-dispositions.md) now reconciles
+all retained categories. The valid-input two-interface bracket fails on both
+versions at instant 97 with a nonlinear CPU-limit error. The final legacy run
+also verifies persisted primary solver diagnostics and guarded four-step cleanup;
+read-only reconciliation confirms both native scenes empty and idle.
+
+1. Complete direct mouse-edit acceptance on both experimental copies. It remains
+   unverified: CUA returned `noWindowsAvailable`; a request for foreground focus
+   is pending. The verifier now isolates stores and fences cleanup by exact
+   document/revision/body ownership and at most two owned history steps, covered
+   by regression tests. A simulated or MCP-generated move is not UI evidence.
+2. Complete review/CI for the final continuation and merge the verified changes.
+   Local final gates: 1520 root tests and typecheck pass. No unrun or failed
+   workflow becomes a pass.
+3. Keep the two-interface nonlinear limitation explicit. Catalog coverage is
+   complete, but the full goal remains active; new solver physics or universal
+   background-window freshness are not implied by fixture coverage.

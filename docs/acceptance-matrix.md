@@ -390,3 +390,14 @@ mutations; normal Undo restores the owned scenes with synthetic redo history.
 Coverage is now 349/371 on both versions. These checks do not qualify physical
 material properties or rendered pixels. The remaining 22 tools per version and
 retained-failure disposition audit are tracked in [full completion audit](catalog-completion-audit.md).
+
+
+Дополнение: [прочность, FEM и live-анализ](strength-fem-catalog-qualification.md)
+прошли на обеих экспериментальных версиях: три сценария расчётов/реестров,
+Gmsh/CalculiX с сопоставлением перекрывающихся сеток, одноинтерфейсный Code_Aster,
+интервью прочности и анализ двух синтетических видов с сохранением после
+перезапуска MCP. Покрытие каталога: **371/371 на каждой версии**; это покрытие
+сценариев, не всех параметров и не физическая квалификация. Полный двухинтерфейсный
+кронштейн на обеих версиях остаётся непринятым: воспроизведён CPU-limit при нелинейных
+итерациях; сохраняется подробный журнал. Отказы сведены в [отдельный аудит](catalog-failure-dispositions.md); проверка
+редактирования мышью ждёт доступного окна. Локально: 1520 тестов, typecheck — PASS.

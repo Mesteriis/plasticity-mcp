@@ -5,6 +5,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createInterface } from "node:readline/promises";
 
 import { hydrateNativeState } from "./native-live-state.ts";
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -64,6 +67,8 @@ async function main(): Promise<void> {
   let initialState: any;
   let baselineState: any;
   let diff: any;
+  let ownedRevision: string | undefined;
+  let ownedBodyId: number | undefined;
   try {
     live = await startMcp(join(output, "strength-store"));
     const windows = await call(live.client, "plasticity_list_windows", {});
@@ -77,6 +82,7 @@ async function main(): Promise<void> {
       intent: "Create one disposable Solid for direct Plasticity UI-edit verification", revision: initialState.revision,
     });
     const body = onlyNamedBody(state, "Direct UI edit acceptance");
+    ownedRevision = state.revision; ownedBodyId = body.id;
     await call(live.client, "plasticity_select_bodies", { ids: [body.id], revision: state.revision });
     await call(live.client, "plasticity_set_view", { view: "isometric", fit: true });
     baselineState = await call(live.client, "plasticity_status", {});
@@ -96,9 +102,11 @@ async function main(): Promise<void> {
     requireCondition(diff.modified.length === 1 && diff.modified[0]?.id === body.id && diff.modified[0]?.geometryChanged === true,
       "Direct UI edit was not reported as a geometric modification of the selected Solid");
     const editedState = await call(live.client, "plasticity_status", {});
+    requireCondition(editedState.documentToken === initialState.documentToken && editedState.bodies.length === 1, "Direct edit changed document ownership or the owned Solid count");
     const editedBody = editedState.bodies.find((candidate: any) => candidate.id === body.id);
     requireCondition(editedBody && JSON.stringify(editedBody.boundsMm) !== JSON.stringify(baselineState.bodies[0].boundsMm),
       "The direct UI gesture did not change the native Solid bounds");
+    ownedRevision = editedState.revision;
     evidence.uiEdit = {
       sceneChanged: diff.sceneChanged,
       revisionChanged: diff.revisionChanged,
@@ -107,14 +115,16 @@ async function main(): Promise<void> {
     };
 
     const undone = await call(live.client, "plasticity_undo", { intent: "Verify Undo of the direct Plasticity UI edit", revision: editedState.revision });
+    ownedRevision = undone.revision;
     requireCondition(JSON.stringify(undone.bodies.find((candidate: any) => candidate.id === body.id)?.boundsMm) === JSON.stringify(baselineState.bodies[0].boundsMm),
       "Undo did not restore the exact pre-edit Solid bounds");
     const redone = await call(live.client, "plasticity_redo", { intent: "Verify Redo of the direct Plasticity UI edit", revision: undone.revision });
+    ownedRevision = redone.revision;
     requireCondition(JSON.stringify(redone.bodies.find((candidate: any) => candidate.id === body.id)?.boundsMm) === JSON.stringify(editedBody.boundsMm),
       "Redo did not restore the exact directly edited Solid bounds");
     evidence.undoRedo = { verified: true, afterUndo: compactBody(undone.bodies[0]!), afterRedo: compactBody(redone.bodies[0]!) };
 
-    const cleanup = await recover(live.client, initialState);
+    const cleanup = await recoverNativeUiFixture(live.client, initialState, ownedRevision, ownedBodyId);
     evidence.cleanup = cleanup;
     requireCondition(cleanup.restoredEmptyDocument === true, "Recovery did not restore the original empty document");
     const finalState = await call(live.client, "plasticity_status", {});
@@ -123,10 +133,11 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, directUiGeometryChangeDetected: true, modifiedBodyId: body.id, undoRedo: true, restoredEmptyDocument: true }));
   } catch (error) {
     evidence.error = boundedError(error);
-    if (live && initialState) {
-      const cleanup = await recover(live.client, initialState).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
+    if (live && initialState && permitsNativeFailureRecovery(error)) {
+      const cleanup = await recoverNativeUiFixture(live.client, initialState, ownedRevision, ownedBodyId).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
       evidence.cleanup = cleanup;
     }
+    if (!permitsNativeFailureRecovery(error)) evidence.cleanup = { restoredEmptyDocument: false, reason: "uncertain-outcome-read-only-inspection-required" };
     throw error;
   } finally {
     evidence.stderr = live?.stderr.join("").slice(-8000) ?? "";
@@ -136,8 +147,7 @@ async function main(): Promise<void> {
 }
 
 function requireEmpty(state: any): void {
-  requireCondition(state.bodies.length === 0 && state.regions.length === 0 && (state.instances ?? []).length === 0,
-    "Live UI-edit acceptance refuses a nonempty Plasticity document");
+  requireCondition(isDisposableEmptyDocument(state), "Live UI-edit acceptance refuses a nonempty document or dirty history");
 }
 function onlyNamedBody(state: any, name: string): any {
   const matches = state.bodies.filter((body: any) => body.name === name);
@@ -157,7 +167,7 @@ async function startMcp(storeRoot: string): Promise<LiveMcp> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" },
+    env: isolatedAcceptanceEnvironment(storeRoot, process.env),
     stderr: "pipe",
   });
   const stderr: string[] = [];
@@ -174,17 +184,21 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   if (!text || response.isError) throw new Error(text ?? `MCP tool ${name} returned no text`);
   return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
-async function recover(client: Client, initial: any): Promise<Record<string, unknown>> {
-  for (let count = 0; count < 24; count += 1) {
-    const status = await call(client, "plasticity_status", {});
-    if (status.documentToken !== initial.documentToken) return { restoredEmptyDocument: false, reason: "document-changed" };
-    if (status.undoDepth <= initial.undoDepth) return { restoredEmptyDocument: status.bodies.length === 0 && status.regions.length === 0 };
-    await call(client, "plasticity_undo", { intent: "Recover disposable direct UI-edit acceptance", revision: status.revision });
+export async function recoverNativeUiFixture(client: Client, initial: any, expectedRevision: string | undefined, bodyId: number | undefined): Promise<Record<string, unknown>> {
+  let state = await call(client, "plasticity_status", {});
+  if (state.documentToken !== initial.documentToken || state.revision !== expectedRevision) {
+    return { restoredEmptyDocument: false, reason: "document-or-revision-ownership-changed" };
   }
-  return { restoredEmptyDocument: false, reason: "undo-limit" };
-}
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
-  return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : []));
+  if (bodyId === undefined || state.bodies.length !== 1 || state.bodies[0].id !== bodyId) {
+    return { restoredEmptyDocument: false, reason: "owned-solid-not-proven" };
+  }
+  const steps = state.undoDepth - initial.undoDepth;
+  if (steps < 1 || steps > 2) return { restoredEmptyDocument: false, reason: "unexpected-history-depth" };
+  for (let count = 0; count < steps; count += 1) {
+    state = await call(client, "plasticity_undo", { intent: "Recover owned disposable direct UI-edit acceptance", revision: state.revision });
+    if (state.documentToken !== initial.documentToken) return { restoredEmptyDocument: false, reason: "document-changed" };
+  }
+  return { restoredEmptyDocument: state.bodies.length === 0 && state.regions.length === 0, undoSteps: steps };
 }
 function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 4000); }
 async function writeExclusive(path: string, value: unknown): Promise<void> {
