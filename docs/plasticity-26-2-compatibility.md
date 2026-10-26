@@ -74,6 +74,12 @@ on both success and rejection. Remote debugging remains bound to loopback.
   passes for aligned and rotated planar targets on both versions; the vector
   SPCurve/mass limitation remains. See [projection methods](curve-imprint-projection.md).
 
+- Screenshot calls can explicitly select `captureMode: viewport` for a verified
+  fresh native WebGL image, including a hidden document. Default full-window
+  capture retains its visibility guard. HTML labels, CSS panels/backgrounds
+  and OS window visibility are outside native-canvas capture scope. See
+  [screenshot modes](viewport-screenshots.md).
+
 ## Catalog audit follow-up
 
 The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every

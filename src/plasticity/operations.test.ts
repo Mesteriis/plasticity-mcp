@@ -6751,3 +6751,24 @@ test("normal imprint uses the native normal method without inventing a vector", 
   await assert.rejects(operations.imprintCurvesOnBody(7, [11], [0,0,-1], { projectionMethod: "invalid" as never }, state.revision), /Unsupported imprint projection/);
   assert.equal(calls.length, 1);
 });
+
+
+test("explicit viewport screenshot requires freshness and matching canvas dimensions without window capture", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-viewport-test-"));
+  const png = Buffer.alloc(24); Buffer.from([137,80,78,71,13,10,26,10]).copy(png); png.write("IHDR",12,"ascii"); png.writeUInt32BE(10,16); png.writeUInt32BE(20,20);
+  let reads = 0;
+  let result = { data: png.toString("base64"), width: 10, height: 20, freshFrame: true, rendererHidden: true };
+  const runtime = { async read() { reads += 1; return result; }, async cdp() { throw new Error("Window CDP must not run"); }, async captureScreenshot() { throw new Error("Window capture must not run"); } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  try {
+    const output = join(root,"view.png");
+    assert.deepEqual(await operations.screenshot(output,"viewport"), { path: output, bytes: 24, captureMode: "viewport", freshFrame: true, rendererHidden: true, width: 10, height: 20 });
+    await assert.rejects(operations.screenshot(output,"viewport"), /exists|overwrite/); assert.equal(reads,1);
+    result = { ...result, freshFrame: false };
+    await assert.rejects(operations.screenshot(join(root,"stale.png"),"viewport"), /freshness/);
+    await assert.rejects(readFile(join(root,"stale.png")), { code: "ENOENT" });
+    result = { ...result, freshFrame: true, width: 11 };
+    await assert.rejects(operations.screenshot(join(root,"mismatch.png"),"viewport"), /dimensions/);
+    await assert.rejects(readFile(join(root,"mismatch.png")), { code: "ENOENT" });
+  } finally { await rm(root,{recursive:true,force:true}); }
+});
