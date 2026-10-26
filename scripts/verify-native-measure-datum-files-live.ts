@@ -13,6 +13,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
 
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+export { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const MEASURE_FILE_CASES = ["bounds", "point-distance", "point-edge-interior", "point-edge-clamped", "linear-edges", "datum-refresh", "construction-plane", "saved-plane-frames", "step-provenance", "step-provenance-geometry", "save-open"] as const;
@@ -374,12 +377,7 @@ async function main(): Promise<void> {
   } finally { await client?.close().catch(() => {}); }
 }
 
-export function isolatedAcceptanceEnvironment(root: string, source: NodeJS.ProcessEnv): Record<string, string> {
-  const inherited = Object.fromEntries(["PATH", "HOME", "TMPDIR"].flatMap(key => typeof source[key] === "string" ? [[key, source[key]!]] : []));
-  return { ...inherited, PLASTICITY_CDP_URL: source.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223", PLASTICITY_STRENGTH_ROOT: root,
-    PLASTICITY_REFERENCE_ROOT: join(root, "references"), PLASTICITY_REFERENCE_ARTIFACT_ROOT: join(root, "reference-artifacts"),
-    PLASTICITY_CONSTRUCTION_HISTORY_ROOT: join(root, "history"), PLASTICITY_THREAD_QUALIFICATION_ROOT: join(root, "thread-qualifications") };
-}
+
 
 async function startMcp(storeRoot: string): Promise<Client> {
   const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: isolatedAcceptanceEnvironment(storeRoot, process.env), stderr: "pipe" });

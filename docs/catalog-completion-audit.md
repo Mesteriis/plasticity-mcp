@@ -22,7 +22,7 @@ A completed slice, green unit tests or a catalog count is not full completion.
 ## Current remaining tool evidence
 
 Source: [machine-readable catalog audit](plasticity-26-2-catalog-audit.json).
-Current successful coverage is 349/371 on 26.2.1 and 313/371 on 26.1.3.
+Current successful coverage is 349/371 on 26.2.1 and 349/371 on 26.1.3.
 The table is a backlog, not an acceptance waiver.
 
 | Tool | 26.2.1 | 26.1.3 |
@@ -33,57 +33,21 @@ The table is a backlog, not an acceptance waiver.
 | `plasticity_analyze_strength_task` | pending | pending |
 | `plasticity_calculate_fastener_member_strength` | pending | pending |
 | `plasticity_calculate_heat_set_insert_retention` | pending | pending |
-| `plasticity_calculate_section_strength` | covered | pending |
 | `plasticity_calculate_single_fastener_strength` | pending | pending |
-| `plasticity_calculate_strength` | covered | pending |
-| `plasticity_calculate_threaded_receiver_strength` | covered | pending |
 | `plasticity_calculate_tongue_root_strength` | pending | pending |
 | `plasticity_calculate_tongue_root_strength_from_coupon_data` | pending | pending |
 | `plasticity_calibrate_turon_mixed_mode_law` | pending | pending |
-| `plasticity_check_fastener_group_layout` | covered | pending |
 | `plasticity_cohesive_fem_report` | pending | pending |
 | `plasticity_compare_static_fem_refinement_reports` | pending | pending |
-| `plasticity_create_blind_hole` | covered | pending |
-| `plasticity_create_blind_hole_pattern` | covered | pending |
-| `plasticity_create_counterbore_pattern` | covered | pending |
-| `plasticity_create_countersink` | covered | pending |
-| `plasticity_create_countersink_pattern` | covered | pending |
-| `plasticity_create_heat_set_insert_pocket_pattern` | covered | pending |
-| `plasticity_create_hex_nut_pocket` | covered | pending |
-| `plasticity_create_hex_nut_pocket_pattern` | covered | pending |
-| `plasticity_create_screw_boss_pattern` | covered | pending |
-| `plasticity_create_slotted_hole` | covered | pending |
-| `plasticity_create_slotted_hole_pattern` | covered | pending |
-| `plasticity_create_through_hole` | covered | pending |
-| `plasticity_create_through_hole_pattern` | covered | pending |
 | `plasticity_design_reference_request` | pending | pending |
 | `plasticity_distribute_fastener_group_load` | pending | pending |
-| `plasticity_fastener_group_plate_bearing_report` | covered | pending |
-| `plasticity_find_faces` | covered | pending |
-| `plasticity_inspect_arbitrary_sections` | covered | pending |
-| `plasticity_inspect_fastener_group` | covered | pending |
-| `plasticity_inspect_integral_rectangular_plate` | covered | pending |
-| `plasticity_inspect_planar_section` | covered | pending |
-| `plasticity_inspect_rectangular_member` | covered | pending |
-| `plasticity_inspect_single_fastener_plate` | covered | pending |
 | `plasticity_list_printed_thread_qualifications` | pending | pending |
 | `plasticity_match_printed_thread_qualification` | pending | pending |
-| `plasticity_measure_fastener_grip_stack` | covered | pending |
-| `plasticity_measure_nonparallel_planar_polygon_clearance` | covered | pending |
 | `plasticity_plan_cohesive_layer_planes` | pending | pending |
 | `plasticity_record_printed_thread_qualification` | pending | pending |
-| `plasticity_scan_arbitrary_sections` | covered | pending |
-| `plasticity_scan_section_strength` | covered | pending |
-| `plasticity_section_strength_scan_report` | covered | pending |
 | `plasticity_static_fem_report` | pending | pending |
 | `plasticity_strength_methods` | pending | pending |
 | `plasticity_strength_request` | pending | pending |
-| `plasticity_verify_fastener_group_load` | covered | pending |
-| `plasticity_verify_fastener_group_plate_bearing` | covered | pending |
-| `plasticity_verify_integral_plate_strength` | covered | pending |
-| `plasticity_verify_member_strength` | covered | pending |
-| `plasticity_verify_section_strength` | covered | pending |
-| `plasticity_verify_single_fastener_strength` | covered | pending |
 | `plasticity_verify_tongue_root_strength_from_coupon_data` | pending | pending |
 
 ## Retained failures requiring final disposition audit
@@ -110,8 +74,8 @@ Current unsupported/native/UI cases must still be assessed before completion.
 
 ## Next execution order
 
-1. Reconcile the remaining legacy native-operation gap using guarded, isolated
-   existing verifiers and stop mutations after uncertain outcomes.
+1. Legacy native-operation coverage now matches modern coverage (349/371 each).
+   Keep corresponding native checks isolated and stop after uncertain outcomes.
 2. Exercise remaining calculation, printed-thread qualification and strength
    request flows through production stdio with independent gates.
 3. Verify actual static/cohesive solver workflows, report freshness/refinement

@@ -8,6 +8,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
 
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 interface Options { help: boolean; target?: string; allowDisposableMutations: boolean; output?: string }
 
@@ -45,7 +48,7 @@ async function main(): Promise<void> {
     command: process.execPath,
     args: [join(root, "scripts", "run-server.ts")],
     cwd: root,
-    env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: join(output, "strength-store"), PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" },
+    env: isolatedAcceptanceEnvironment(join(output, "strength-store"), process.env),
     stderr: "pipe",
   });
   const client = new Client({ name: "plasticity-nonparallel-clearance-live", version: "1.0.0" });
@@ -58,7 +61,7 @@ async function main(): Promise<void> {
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     initial = await call(client, "plasticity_connect", { targetId: options.target });
-    requireCondition(initial.bodies.length === 0 && initial.regions.length === 0 && (initial.instances ?? []).length === 0, "Refusing disposable mutations in a nonempty Plasticity document");
+    requireCondition(isDisposableEmptyDocument(initial), "Refusing disposable mutations in a nonempty Plasticity document");
     requireCondition((initial.groups ?? []).filter((group: { id: number }) => group.id !== 0).length === 0, "Refusing mutations while non-root groups exist");
     evidence.initial = { documentToken: initial.documentToken, revision: initial.revision, undoDepth: initial.undoDepth };
     const snapshot = await call(client, "plasticity_capture_snapshot", { label: "nonparallel-planar-clearance-empty" });
@@ -156,7 +159,6 @@ function toolText(response: unknown): string { if (typeof response !== "object" 
 async function recover(client: Client, initial: any): Promise<Record<string, unknown>> { for (let count = 0; count < 16; count += 1) { const status = await call(client, "plasticity_status", {}); if (status.documentToken !== initial.documentToken) return { restoredEmptyDocument: false, reason: "document-changed" }; if (status.undoDepth <= initial.undoDepth) return { restoredEmptyDocument: status.bodies.length === 0 }; await call(client, "plasticity_undo", { intent: "Recover nonparallel planar-clearance acceptance", revision: status.revision }); } return { restoredEmptyDocument: false, reason: "undo-limit" }; }
 function near(actual: number, expected: number, tolerance: number, label: string): void { requireCondition(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, `${label}: expected ${expected} ± ${tolerance}, got ${actual}`); }
 function requireCondition(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> { return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : [])); }
 function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 4000); }
 async function writeExclusive(path: string, value: unknown): Promise<void> { await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 }); }
 async function reconcileFailure(client: Client, initial: any, snapshotId?: string): Promise<Record<string, unknown>> {

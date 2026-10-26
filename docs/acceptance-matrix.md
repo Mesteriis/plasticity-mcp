@@ -382,3 +382,11 @@ directly (calculation version 2). Authenticated version-1 records expose annotat
 corrected views without rewriting bytes; unknown or altered results are rejected.
 Original live failure retained. Coverage becomes 349/371 modern and 313/371 legacy.
 No physical material, standards conformity, cohesive law or FEM result is qualified.
+
+Legacy native gap: the existing fastener-pocket/strength/group, plate, section and
+nonparallel planar-clearance verifiers pass on both experimental versions with
+isolated stores and empty-document guards. Uncertain outcomes prohibit recovery
+mutations; normal Undo restores the owned scenes with synthetic redo history.
+Coverage is now 349/371 on both versions. These checks do not qualify physical
+material properties or rendered pixels. The remaining 22 tools per version and
+retained-failure disposition audit are tracked in [full completion audit](catalog-completion-audit.md).

@@ -9,6 +9,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { Evidence } from "../src/strength/contracts.ts";
 import type { SectionScenarioInput } from "../src/strength/section-contracts.ts";
 
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
+
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export interface SectionAcceptanceOptions {
@@ -102,7 +106,7 @@ async function main(): Promise<void> {
     const windows = await call(live.client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     initialState = await call(live.client, "plasticity_connect", { targetId: options.target });
-    requireCondition(Array.isArray(initialState.bodies) && initialState.bodies.length === 0, "Refusing disposable mutations in a nonempty Plasticity document");
+    requireCondition(isDisposableEmptyDocument(initialState), "Refusing disposable mutations unless the document and Undo/Redo history are completely empty");
     evidence.initial = stateSummary(initialState);
     const snapshot = await call(live.client, "plasticity_capture_snapshot", { label: "section-strength-live-initial-empty" });
 
@@ -521,12 +525,13 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && initialState && !evidence.cleanup) {
+    if (live && initialState && !evidence.cleanup && permitsNativeFailureRecovery(error)) {
       evidence.cleanup = await recoverDisposableScene(live.client, initialState).catch((cleanupError) => ({
         restoredEmptyDocument: false,
         reason: boundedError(cleanupError),
       }));
     }
+    if (!permitsNativeFailureRecovery(error)) evidence.cleanup = { restoredEmptyDocument: false, reason: "uncertain-outcome-read-only-inspection-required" };
     await writeExclusive(join(output, "failure.json"), sanitizeEvidence(evidence)).catch(() => {});
     throw error;
   } finally {
@@ -539,11 +544,7 @@ async function startMcp(storeRoot: string): Promise<LiveMcp> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: {
-      ...selectedEnvironment(process.env),
-      PLASTICITY_STRENGTH_ROOT: storeRoot,
-      PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223",
-    },
+    env: isolatedAcceptanceEnvironment(storeRoot, process.env),
     stderr: "pipe",
   });
   const stderr: string[] = [];
@@ -821,13 +822,6 @@ async function writeExclusive(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
 }
 
-function selectedEnvironment(source: NodeJS.ProcessEnv): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const key of ["CODEX_HOME", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "SSL_CERT_FILE", "LANG", "LC_ALL"]) {
-    if (source[key] !== undefined) result[key] = source[key];
-  }
-  return result;
-}
 
 function boundedError(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).replaceAll(/\s+/g, " ").slice(0, 1_000);
