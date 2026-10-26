@@ -1314,6 +1314,30 @@ test("synchronizes visible native distance-measurement overlays with exact B-Rep
   assert.match(calls[0]?.source ?? "", /manager\.set\(key, tag\)/);
   assert.match(calls[0]?.source ?? "", /manager\.get\(key\) !== tag/);
 
+  // Execute the emitted callback with suspended RAF, then explicitly refresh.
+  const source = calls[0]!.source;
+  const callback = source.slice(source.indexOf("          const updateLabels ="), source.indexOf("          tag.refreshLabels();") + "          tag.refreshLabels();".length);
+  let nextFrame = 0;
+  const pending = new Map<number, () => void>();
+  const label = { style: {} as Record<string, string>, removed: false, remove() { this.removed = true; } };
+  const tag: any = {};
+  const manager = new Map([["measurement", tag]]);
+  const point = { x: 0, y: 0, z: 0 };
+  Function("manager", "key", "tag", "labels", "labelPoint", "requestAnimationFrame", "cancelAnimationFrame", callback)(
+    manager, "measurement", tag,
+    [{ label, viewport: { camera: { updateMatrixWorld() {} }, container: { clientWidth: 100, clientHeight: 80 } } }],
+    { clone: () => ({ project: () => point }) },
+    (fn: () => void) => { pending.set(++nextFrame, fn); return nextFrame; },
+    (id: number) => pending.delete(id),
+  );
+  assert.equal(label.style.left, "50px");
+  for (let i = 0; i < 3; i++) { point.x = .5; tag.refreshLabels(); assert.equal(pending.size, 1); }
+  assert.equal(label.style.left, "75px");
+  point.z = 2; tag.refreshLabels(); assert.equal(label.style.display, "none");
+  manager.clear(); tag.refreshLabels();
+  assert.equal(pending.size, 0);
+  assert.equal(label.removed, true);
+
   await operations.state();
   assert.equal(calls.length, 1, "an unchanged measurement revision should not rebuild its overlay");
 
@@ -6771,4 +6795,34 @@ test("explicit viewport screenshot requires freshness and matching canvas dimens
     await assert.rejects(operations.screenshot(join(root,"mismatch.png"),"viewport"), /dimensions/);
     await assert.rejects(readFile(join(root,"mismatch.png")), { code: "ENOENT" });
   } finally { await rm(root,{recursive:true,force:true}); }
+});
+
+test("item transform preserves missing native measurement names by stable ID inside commit", async () => {
+  const state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "fixture", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  let source = "";
+  const runtime = { async getState() { return state; }, async mutate(code: string) { source = code; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  await operations.move([7], [5, 0, 0], state.revision);
+  const body = source.slice(source.indexOf("      const measurementNames ="), source.indexOf("      return result;") + "      return result;".length);
+  const execute = Function("editor", "factory", `return (async () => {${body}})()`);
+  const original = [
+    { versionId: 1, userData: { name: "Width" } },
+    { versionId: 2, userData: { name: "Deleted" } },
+    { versionId: 3, userData: { name: "" } },
+    { versionId: 4, userData: { name: "Old" } },
+  ];
+  const replaced: any[] = [{ versionId: 11 }, { versionId: 13, userData: { extra: true } }, { versionId: 14, userData: { name: "Native replacement" } }, { versionId: 22 }];
+  let current: any[] = original;
+  const ids = new Map([[1, 1], [11, 1], [2, 2], [3, 3], [13, 3], [4, 4], [14, 4], [22, 22]]);
+  const editor = { measurements: { snapshot: () => ({ repo: { measurements: current } }), lookupStableId: (id: number) => ids.get(id) } };
+  const result = await execute(editor, { async commit() { current = replaced; return "native-result"; } });
+  assert.equal(result, "native-result");
+  assert.equal(replaced[0].userData.name, "Width");
+  assert.deepEqual(replaced[1].userData, { extra: true, name: "" });
+  assert.equal(replaced[2].userData.name, "Native replacement");
+  assert.equal(replaced[3].userData, undefined, "deleted stable ID must not name another measurement");
+  assert.deepEqual(original[0], { versionId: 1, userData: { name: "Width" } });
+  current = original;
+  await assert.rejects(execute(editor, { async commit() { throw Error("native failure"); } }), /native failure/);
+  assert.equal(current, original);
 });

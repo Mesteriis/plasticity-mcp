@@ -426,6 +426,29 @@ const commandEnd = `
   await this.exec(command);
   if (failure) throw failure;`;
 
+// Capture primitive metadata before commit and restore only missing names on
+// surviving stable IDs, inside the command so history snapshots include them.
+const commandEndPreservingMeasurementNames = `
+      const measurementNames = new Map(Array.from(editor.measurements.snapshot().repo?.measurements ?? [])
+        .filter(measurement => typeof measurement.userData?.name === 'string')
+        .map(measurement => [editor.measurements.lookupStableId(measurement.versionId), measurement.userData.name]));
+      const result = await factory.commit();
+      for (const measurement of editor.measurements.snapshot().repo?.measurements ?? []) {
+        const name = measurementNames.get(editor.measurements.lookupStableId(measurement.versionId));
+        if (name !== undefined && typeof measurement.userData?.name !== 'string') {
+          measurement.userData ??= {};
+          measurement.userData.name = name;
+        }
+      }
+      return result;
+    } catch (error) {
+      failure = error;
+      throw error;
+    }
+  };
+  await this.exec(command);
+  if (failure) throw failure;`;
+
 export class PlasticityOperations {
   readonly runtime: PlasticityRuntime;
   readonly datumRegistry: DatumRegistry;
@@ -623,7 +646,13 @@ export class PlasticityOperations {
             }
             tag.frameId = requestAnimationFrame(updateLabels);
           };
-          updateLabels();
+          // Hidden renderers may suspend RAF. Keep an explicit refresh without
+          // starting a second animation loop when a caller advances the camera.
+          tag.refreshLabels = () => {
+            if (tag.frameId !== undefined) cancelAnimationFrame(tag.frameId);
+            updateLabels();
+          };
+          tag.refreshLabels();
         }
         for (const viewport of viewports) viewport.setNeedsRender();
       }`, ["LineSegmentHelper", "Vector3", "Vector2", "makeAxisAlignedMeasurementPath"], [{
@@ -4370,7 +4399,7 @@ export class PlasticityOperations {
       ${commandStart("MoveItemCommand")}
       factory.items = args.ids.map(find);
       factory.move.fromArray(args.delta);
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["MoveItemAndEmptyFactory"], [{ ids, delta: toMeters(deltaMm) }]);
     return await this.state();
   }
@@ -4383,7 +4412,7 @@ export class PlasticityOperations {
       factory.items = args.ids.map(find);
       factory.pivot.fromArray(args.pivot);
       factory.rotation.copy(new Quaternion().setFromAxisAngle(new Vector(...args.axis).normalize(), args.radians));
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["RotateItemAndEmptyFactory", "Vector3", "Quaternion"], [{ ids, pivot: toMeters(pivotMm), axis, radians: degreesToRadians(degrees) }]);
     return await this.state();
   }
@@ -4403,7 +4432,7 @@ export class PlasticityOperations {
       factory.items = args.ids.map(find);
       factory.pivot.fromArray(args.pivot);
       factory.rotation.set(args.quaternion[0], args.quaternion[1], args.quaternion[2], args.quaternion[3]);
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["RotateItemAndEmptyFactory", "Vector3", "Quaternion"], [{ ids, pivot: toMeters(pivotMm), quaternion }]);
     return await this.state();
   }
@@ -4416,7 +4445,7 @@ export class PlasticityOperations {
       factory.items = args.ids.map(find);
       factory.pivot.fromArray(args.pivot);
       factory.scale.fromArray(args.factors);
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["ProjectingScaleItemAndEmptyFactory"], [{ ids, pivot: toMeters(pivotMm), factors }]);
     return await this.state();
   }
@@ -9710,6 +9739,7 @@ export class PlasticityOperations {
         }
       }
       viewport.setNeedsRender();
+      for (const tag of this.__plasticityMcpDistanceOverlays?.values() ?? []) tag.refreshLabels?.();
       return { position: viewport.camera.position.toArray(), target: viewport.camera.target.toArray(), mode: viewport.camera.mode };
     }`, [{ view, fit }]);
   }

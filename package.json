@@ -93,6 +93,7 @@
     "accept:design-reference-images": "node scripts/verify-design-reference-multiview-live.ts",
     "accept:design-reference-multiview": "node scripts/verify-design-reference-multiview-live.ts",
     "accept:plasticity-screenshot": "node scripts/verify-screenshot-live.ts",
+    "accept:native-measurement-labels": "node scripts/verify-native-measurement-labels-live.ts",
     "accept:native-topology-distance": "node scripts/verify-native-topology-distance-live.ts",
     "accept:native-tool-router": "node scripts/verify-native-tool-router-live.ts",
     "accept:native-point-planar-circular-face": "node scripts/verify-native-point-planar-circular-face-live.ts",

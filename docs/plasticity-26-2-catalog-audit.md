@@ -897,3 +897,75 @@ finish empty and idle; installed application and security settings were unchange
 Validation: 1478 root tests and typecheck pass, including three regressions for
 the independent box verifier. Catalog counts/references and `git diff --check`
 pass. Original legacy strict bounds and other parameter/window/manual gaps remain.
+
+
+## HTML measurement label lifecycle
+
+PR #26 is merged. The next continuation fixes stale HTML distance-label anchors
+when the renderer suspends RAF. Camera changes and native viewport rendering now
+refresh labels synchronously without duplicating animation loops. Both experimental
+versions pass nine native/HTML-layout phases: creation, camera, move, move Undo/Redo,
+delete, delete Undo/Redo and deletion of all dimensions. Empty scene/snapshot and
+in-sync durable journal cleanup pass. The original stale-camera failure was
+reproduced on both versions before the patch.
+
+[Commands, assertions and limitations](html-measurement-labels.md) distinguish
+DOM/layout evidence from rasterized HTML glyphs and full-window pixels. Native
+measurement names are lost after a transform on both versions; stable-ID and
+numeric lifecycle checks pass, while name persistence remains unresolved.
+Coverage remains 303/371 on 26.2.1 and 266/371 on 26.1.3; this continuation
+qualifies an additional workflow without claiming new tool names. Existing
+parameter/window/manual failures remain. Installed applications and security
+settings were unchanged.
+
+Validation: 1480 root tests and typecheck pass, including executed callback and
+capture-order regressions plus live-runner guards.
+
+
+## Measurement names and external window review
+
+The measurement label fixture now passes thirteen phases on each experimental
+version, requiring exact names through item rotation/scale Undo, move Undo/Redo
+and measurement delete Undo/Redo. Item transform commands preserve missing names
+on surviving stable IDs inside the command, before history captures the result.
+No cache/prototype patch is installed; other command families and file
+serialization remain outside this name qualification.
+
+External CUA window images were collected at three paused checkpoints. Manual
+review fails overall on both versions: modern capture retains 10.00 mm after a
+native/DOM update to 15 mm and retains labels after deletion; legacy creation
+capture is stale/empty, although its 15.00 mm update and deletion images are
+correct. Captures remain separate from passing native/DOM evidence. The runner
+records artifact hashes without calling image presence a glyph pass. Manual
+review retains the native/layout exit code separately and fails window acceptance.
+See [the full contract and review table](html-measurement-labels.md).
+
+1482 root tests and typecheck pass. Accepted tool counts are 303/371 on 26.2.1
+and 267/371 on 26.1.3; the scale call adds legacy acceptance for that fixture. Failed external window review adds one failed fixture on
+each version; existing failures remain. Both CAD scenes finish empty and idle.
+
+
+## Foreground external-window review on 26.1.3
+
+After explicit manual viewport focus, a separate focused fixture passes all three
+real CUA window images: four original labels, the 10→15 mm update, then no labels
+or helpers after deletion. The exact saved JPEG bytes were visually reviewed and
+hashes match the native/DOM evidence. All thirteen native/DOM phases, names,
+source snapshot restoration and empty/idle cleanup pass. The earlier failed
+window fixture is preserved; this does not accept background freshness or the
+default full-window MCP capture. Focused 26.2.1 review remains pending.
+
+No code changed in this continuation. Catalog counts/references and diff checks
+pass; tool coverage stays 303/371 modern and 267/371 legacy.
+
+
+## Foreground external-window review on 26.2.1
+
+Explicit manual viewport focus also permits the modern focused fixture to pass
+all three real CUA images: initial four labels, the 15.00 mm update and deletion
+of all labels/helpers. The same saved JPEG bytes were manually reviewed and
+hashes match evidence. All thirteen native/DOM phases, exact names, source
+restoration and empty/idle cleanup pass. This completes the bounded foreground
+external-window lifecycle on both versions. Earlier stale-window failures remain
+separate; background freshness and default full-window MCP capture stay outside
+acceptance. No code changed; catalog counts/references and diff checks pass.
