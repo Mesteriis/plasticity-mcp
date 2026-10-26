@@ -83,15 +83,15 @@ acceptance; original full-window MCP fixtures remain failed too. A real foregrou
 window and repeatable fresh captures are still needed. No visibility emulation,
 security changes or replacement rasterization are used.
 
-After the user manually focused the experimental 26.1.3 viewport, a separate
-`html-window-review-focused` run passed all three manually inspected images:
+After the user manually focused each experimental viewport, separate
+`html-window-review-focused` runs passed on **both 26.1.3 and 26.2.1** with all
+three manually inspected images:
 5.00/7.07/20.00/10.00 mm after creation, 15.00 mm after moving the second box,
 and no measurement labels/helper lines after deletion. The same captured JPEG
 bytes were displayed for review and saved; hashes match the fixture evidence.
 All thirteen native/DOM phases, exact names, source restoration and empty/idle
 cleanup also pass. This qualifies that foreground external-window workflow on
-26.1.3; it does not accept the default Chromium full-window MCP capture or
-background freshness. Earlier stale-window failures remain. The corresponding
-focused 26.2.1 review is still pending.
+both versions; it does not accept the default Chromium full-window MCP capture or
+background freshness. Earlier stale-window failures remain.
 
 Installed applications, app bundles and security settings were unchanged.

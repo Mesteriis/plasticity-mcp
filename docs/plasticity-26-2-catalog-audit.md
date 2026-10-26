@@ -957,3 +957,15 @@ default full-window MCP capture. Focused 26.2.1 review remains pending.
 
 No code changed in this continuation. Catalog counts/references and diff checks
 pass; tool coverage stays 303/371 modern and 267/371 legacy.
+
+
+## Foreground external-window review on 26.2.1
+
+Explicit manual viewport focus also permits the modern focused fixture to pass
+all three real CUA images: initial four labels, the 15.00 mm update and deletion
+of all labels/helpers. The same saved JPEG bytes were manually reviewed and
+hashes match evidence. All thirteen native/DOM phases, exact names, source
+restoration and empty/idle cleanup pass. This completes the bounded foreground
+external-window lifecycle on both versions. Earlier stale-window failures remain
+separate; background freshness and default full-window MCP capture stay outside
+acceptance. No code changed; catalog counts/references and diff checks pass.
