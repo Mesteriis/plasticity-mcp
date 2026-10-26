@@ -75,3 +75,27 @@ test("requires caller confirmation and detects tampered or un-recomputable MMB r
   await writeFile(recordPath, JSON.stringify(parsed));
   await assert.rejects(store.read(record.id), /result no longer matches its immutable test input/i);
 });
+
+test("legacy v1 MMB records yield explicitly recomputed v2 results without rewriting source bytes", async context => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-mmb-legacy-read-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const source = await readFile(new URL("./fixtures/mmb-v1-synthetic.json", import.meta.url), "utf8");
+  const legacy = JSON.parse(source);
+  const path = join(root, `${legacy.id}.json`);
+  await writeFile(path, source, { flag: "wx" });
+  const store = new MmbModeIEnergyTestStore(root);
+  const read = await store.read(legacy.id);
+  assert.equal(read.calculation.calculationVersion, 2);
+  assert.equal(read.recalculatedFromVersion, 1);
+  assert.equal(read.recalculationReason, "MMB_V1_ARM_THICKNESS_HALVED");
+  assert.ok(Math.abs(read.calculation.specimens[0]!.modeIEnergyReleaseRateJPerM2 - 41486.7787876807657) < 1e-9);
+  assert.equal((await store.record(legacy.input)).alreadyExisted, true);
+  assert.deepEqual((await store.list())[0], read);
+  assert.equal(await readFile(path, "utf8"), source);
+  const changed = structuredClone(legacy);
+  changed.calculation.specimens[0].modeIEnergyReleaseRateJPerM2 += 1;
+  await writeFile(path, JSON.stringify(changed));
+  await assert.rejects(store.read(legacy.id), /result no longer matches its immutable test input/);
+  await writeFile(path, JSON.stringify({ ...legacy, calculation: { ...legacy.calculation, calculationVersion: 999 } }));
+  await assert.rejects(store.read(legacy.id), /result no longer matches its immutable test input/);
+});

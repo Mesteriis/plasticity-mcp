@@ -13,7 +13,7 @@ const specimenCsvSchema = z.object({
   specimenId: z.string().trim().min(1).max(240),
   widthMm: z.number().finite().positive(),
   totalLengthMm: z.number().finite().positive(),
-  armThicknessMm: z.number().finite().positive(),
+  armThicknessMm: z.number().finite().positive().describe("Thickness of one delaminated arm: half the full symmetric specimen thickness, in mm"),
   halfSpanMm: z.number().finite().positive(),
   leverArmMm: z.number().finite().positive(),
   initialCrackLengthMm: z.number().finite().positive(),

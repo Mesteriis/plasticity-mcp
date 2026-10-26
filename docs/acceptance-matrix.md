@@ -374,3 +374,11 @@ of `printed-material`); its original failed fixture is retained. Source bytes/ha
 statistical exclusions, explicit unit conversions and curve work are checked.
 Coverage becomes 331/371 modern and 295/371 legacy. These synthetic checks are
 not physical material/joint qualification, cohesive calibration or FEM acceptance.
+
+Synthetic fracture-energy tools: [DCB, ENF and MMB cases](fracture-energy-qualification.md)
+pass on both experimental copies, covering calculations, explicit CSV selections,
+immutable registries, conflicts and restart. MMB now uses the per-arm thickness
+directly (calculation version 2). Authenticated version-1 records expose annotated
+corrected views without rewriting bytes; unknown or altered results are rejected.
+Original live failure retained. Coverage becomes 349/371 modern and 313/371 legacy.
+No physical material, standards conformity, cohesive law or FEM result is qualified.
