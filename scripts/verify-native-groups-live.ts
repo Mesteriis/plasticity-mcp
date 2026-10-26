@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { isolatedAcceptanceEnvironment } from "./verify-native-measure-datum-files-live.ts";
+
 import { hydrateNativeState } from "./native-live-state.ts";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -15,6 +17,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export interface NativeGroupAcceptanceOptions {
   help: boolean;
+  nativeStateOnly?: boolean;
   target?: string;
   allowDisposableMutations: boolean;
   output?: string;
@@ -28,6 +31,7 @@ export function parseNativeGroupAcceptanceArgs(argv: string[]): NativeGroupAccep
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help") options.help = true;
+    else if (argument === "--native-state-only") options.nativeStateOnly = true;
     else if (argument === "--allow-disposable-mutations") options.allowDisposableMutations = true;
     else if (argument === "--target") {
       const value = argv[++index];
@@ -54,7 +58,10 @@ With no arguments or --help, this command performs no connection and no mutation
 Live mode refuses a nonempty Plasticity document or leftover non-root groups, never
 chooses a window automatically, uses a separate stdio MCP process, verifies native
 group state plus planar, cylindrical, vertex, and linear-edge placement, and writes
-only sanitized evidence to a new directory.`;
+only sanitized evidence to a new directory.
+
+--native-state-only checks native data/history without screenshot or pixel assertions.
+The default retains the full viewport checks; this option does not qualify rendering.`;
 
 async function main(): Promise<void> {
   const options = parseNativeGroupAcceptanceArgs(process.argv.slice(2));
@@ -66,6 +73,7 @@ async function main(): Promise<void> {
     startedAt: new Date().toISOString(),
     targetId: options.target!,
     workbenchUsed: false,
+    validationScope: options.nativeStateOnly ? "native-state-only" : "native-and-rendered-viewport",
   };
   let live: LiveMcp | undefined;
   let initialState: any;
@@ -78,6 +86,21 @@ async function main(): Promise<void> {
     requireCondition(nonRootGroups(initialState).length === 0, "Refusing disposable mutations while non-root Plasticity groups exist");
     evidence.initial = stateSummary(initialState);
     const snapshot = await call(live.client, "plasticity_capture_snapshot", { label: "native-groups-live-initial-empty" });
+    if (options.nativeStateOnly) {
+      const diagnosis = await call(live.client, "plasticity_diagnose", {});
+      requireCondition(diagnosis.windows.some((window: any) => window.id === options.target), "Diagnosis omitted the selected window");
+      const bindings: string[] = []; let offset = 0; let matching = 0;
+      do {
+        const page = await call(live.client, "plasticity_capabilities", { query: "Group", offset, limit: 2 });
+        requireCondition(page.offset === offset && page.bindings.every((name: string) => name.toLowerCase().includes("group")), "Group capability page/filter mismatch");
+        matching = page.matchingBindings; bindings.push(...page.bindings);
+        if (page.nextOffset === null) break;
+        requireCondition(page.nextOffset === offset + page.bindings.length && page.nextOffset > offset, "Capability pagination did not advance"); offset = page.nextOffset;
+      } while (offset <= 10000);
+      requireCondition(matching > 0 && bindings.length === matching && new Set(bindings).size === matching, "Group capability pagination is incomplete");
+      evidence.discovery = { selectedWindowPresent: true, matchingBindings: matching, completeFilteredPagination: true };
+    }
+
 
     let state = await call(live.client, "plasticity_create_box", {
       originMm: [0, 0, 0], sizeMm: [20, 10, 5], name: "Disposable bracket",
@@ -208,31 +231,34 @@ async function main(): Promise<void> {
     state = await call(live.client, "plasticity_undo", { intent: "Restore bodies after planar-face acceptance", revision: state.revision });
     vectorNear(bodyById(state, bracketId).boundsMm.min, bracketBounds.min, 0.01, "alignment final restore bracket minimum");
 
-    // The node flags alone can change while the viewport keeps drawing the previous scene, so each
-    // visibility step is also checked against the rendered frame.
-    await call(live.client, "plasticity_set_view", { view: "isometric", fit: true });
-    const shownFrame = await viewportFrame(live.client, join(output, "visibility-shown.png"));
+    // Node flags alone do not prove a viewport redraw. The default scope therefore
+    // also checks each visibility step against the rendered frame.
+    if (!options.nativeStateOnly) await call(live.client, "plasticity_set_view", { view: "isometric", fit: true });
+    const shownFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-shown.png"));
     priorDepth = state.undoDepth;
     state = await call(live.client, "plasticity_set_visibility", {
       bodyIds: [housingBodyId], visible: false, intent: "Verify exact native body visibility", revision: state.revision,
     });
     requireHistoryStep(state, priorDepth, "Hide housing body");
     requireCondition(bodyById(state, housingBodyId).visible === false, "Housing body remains visible");
-    const hiddenFrame = await viewportFrame(live.client, join(output, "visibility-hidden.png"));
+    const hiddenFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-hidden.png"));
     // The outliner row alone changes well under 0.1% of the window when the viewport stays stale.
-    const hiddenDifference = comparePngPixels(shownFrame, hiddenFrame);
-    requireCondition(hiddenDifference.changedPixelRatio >= 0.002, `Viewport still renders the hidden housing body (changed ${hiddenDifference.changedPixelRatio})`);
+    const hiddenDifference = shownFrame && hiddenFrame ? comparePngPixels(shownFrame, hiddenFrame) : null;
+    if (hiddenDifference) requireCondition(hiddenDifference.changedPixelRatio >= 0.002, `Viewport still renders the hidden housing body (changed ${hiddenDifference.changedPixelRatio})`);
     state = await call(live.client, "plasticity_undo", { intent: "Verify visibility Undo", revision: state.revision });
     requireCondition(bodyById(state, housingBodyId).visible === true, "Visibility Undo did not show the housing body");
-    const undoFrame = await viewportFrame(live.client, join(output, "visibility-undo.png"));
-    const undoDifference = comparePngPixels(shownFrame, undoFrame);
-    requireCondition(undoDifference.changedPixelRatio <= 0.0001, `Visibility Undo did not restore the shown viewport (changed ${undoDifference.changedPixelRatio})`);
+    const undoFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-undo.png"));
+    const undoDifference = shownFrame && undoFrame ? comparePngPixels(shownFrame, undoFrame) : null;
+    if (undoDifference) requireCondition(undoDifference.changedPixelRatio <= 0.0001, `Visibility Undo did not restore the shown viewport (changed ${undoDifference.changedPixelRatio})`);
     state = await call(live.client, "plasticity_redo", { intent: "Verify visibility Redo", revision: state.revision });
     requireCondition(bodyById(state, housingBodyId).visible === false, "Visibility Redo did not hide the housing body");
-    const redoFrame = await viewportFrame(live.client, join(output, "visibility-redo.png"));
-    const redoDifference = comparePngPixels(hiddenFrame, redoFrame);
-    requireCondition(redoDifference.changedPixelRatio <= 0.0001, `Visibility Redo did not restore the hidden viewport (changed ${redoDifference.changedPixelRatio})`);
-    evidence.visibilityFrames = { hidden: hiddenDifference, undo: undoDifference, redo: redoDifference };
+    const redoFrame = options.nativeStateOnly ? null : await viewportFrame(live.client, join(output, "visibility-redo.png"));
+    const redoDifference = hiddenFrame && redoFrame ? comparePngPixels(hiddenFrame, redoFrame) : null;
+    if (redoDifference) requireCondition(redoDifference.changedPixelRatio <= 0.0001, `Visibility Redo did not restore the hidden viewport (changed ${redoDifference.changedPixelRatio})`);
+    if (!options.nativeStateOnly) evidence.visibilityFrames = { hidden: hiddenDifference, undo: undoDifference, redo: redoDifference };
+    const listedGroups = await call(live.client, "plasticity_list_groups", {});
+    requireCondition(listedGroups.revision === state.revision && listedGroups.activeGroupId === state.activeGroupId && JSON.stringify(listedGroups.groups) === JSON.stringify(state.groups), "Group listing differs from native status");
+    evidence.groupListing = listedGroups;
 
     priorDepth = state.undoDepth;
     state = await call(live.client, "plasticity_set_locked", {
@@ -435,7 +461,7 @@ async function main(): Promise<void> {
 }
 
 async function startMcp(storeRoot: string): Promise<LiveMcp> {
-  const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" }, stderr: "pipe" });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: isolatedAcceptanceEnvironment(storeRoot, process.env), stderr: "pipe" });
   const stderr: string[] = [];
   transport.stderr?.on("data", (chunk) => { stderr.push(String(chunk).slice(-4096)); while (stderr.join("").length > 16384) stderr.shift(); });
   const client = new Client({ name: "plasticity-native-groups-live", version: "1.0.0" });
@@ -565,7 +591,6 @@ function stateSummary(state: any): Record<string, unknown> {
 function requireHistoryStep(state: any, priorDepth: number, label: string): void { requireCondition(state.undoDepth === priorDepth + 1, `${label} did not occupy exactly one history step`); }
 function vectorNear(actual: number[], expected: number[], tolerance: number, label: string): void { requireCondition(actual.length === expected.length, `${label}: vector length mismatch`); actual.forEach((value, index) => requireCondition(Number.isFinite(value) && Math.abs(value - expected[index]!) <= tolerance, `${label}[${index}]: expected ${expected[index]} ± ${tolerance}, got ${value}`)); }
 function requireCondition(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> { return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : [])); }
 function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 4000); }
 async function writeExclusive(path: string, value: unknown): Promise<void> { await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 }); }
 
