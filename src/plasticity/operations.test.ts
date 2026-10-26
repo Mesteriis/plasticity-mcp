@@ -5951,6 +5951,7 @@ test("rejects invalid native helix geometry before mutation", async () => {
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 0], 5, 4, [1, 0, 0], "right", state.revision), /axis/i);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 0, 4, [1, 0, 0], "right", state.revision), /radius/i);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 5, 0, [1, 0, 0], "right", state.revision), /turns/i);
+  await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 5], 3.6, 2.5, [1, 0, 0], "right", state.revision), /Fractional Helix/);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 5, 4, [0, 0, 1], "right", state.revision), /radial direction/i);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 5, 4, [1, 0, 0], "right", "old-revision"), /stale reference/i);
   assert.equal(mutations, 0);

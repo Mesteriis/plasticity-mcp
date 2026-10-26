@@ -14,7 +14,7 @@ import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-stren
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const THREAD_TOOL_CASES = ["external-right", "external-left", "internal-right", "internal-left", "hex-nut", "hex-screw"] as const;
+export const THREAD_TOOL_CASES = ["external-right", "external-left", "internal-right", "internal-left", "hex-nut", "hex-screw", "internal-right-integral", "internal-left-integral", "hex-nut-integral", "fractional-preflight"] as const;
 type ThreadToolCase = typeof THREAD_TOOL_CASES[number];
 
 interface Options { case: ThreadToolCase; help: boolean; target?: string; output?: string; allowDisposableMutations: boolean }
@@ -49,6 +49,10 @@ const HELP = `Usage:
 
 Cases: ${THREAD_TOOL_CASES.join(", ")} (select with --case).
 
+Original internal-right/internal-left/hex-nut inputs request fractional turns
+and remain unsupported. Use their -integral variants for whole-turn qualification;
+fractional-preflight verifies rejection without geometry changes.
+
 No-argument and --help modes do not connect to Plasticity. Live mode requires
 an explicit empty disposable document, verifies native custom rounded printed-thread tools and
 mass properties through stdio MCP, checks Undo/Redo, restores the scene, and
@@ -82,15 +86,58 @@ async function main(): Promise<void> {
       } else state = result;
       return result;
     };
-    const female = options.case.startsWith("internal-") || options.case === "hex-nut";
-    const handedness = options.case.endsWith("left") ? "left" : "right";
+    const female = options.case.startsWith("internal-") || options.case.startsWith("hex-nut");
+    const handedness = options.case.includes("-left") ? "left" : "right";
+    const overshoot = options.case.endsWith("-integral") ? 1 : 0.5;
+    const extendedLength = 4 + 2 * overshoot;
     const definition = { nominalDiameterMm: 8, pitchMm: 2, threadDepthMm: 0.8, radialDirection: [1, 0, 0], handedness };
+    evidence.fixtureParameters = { ...definition, cutterOvershootMm: overshoot, nominalLengthMm: 4, envelopeToleranceMm: 0.01 };
     await mutate("plasticity_create_box", { originMm: [30, 0, 0], sizeMm: [2, 3, 4] });
     const controlId = state.bodies[0].id;
     let targetId: number | undefined;
-    if (options.case.startsWith("internal-")) {
+    if (options.case.startsWith("internal-") || options.case === "fractional-preflight") {
       await mutate("plasticity_create_box", { originMm: [-8, -8, 0], sizeMm: [16, 16, 4] });
       targetId = state.bodies.find((body: any) => body.id !== controlId).id;
+    }
+    if (options.case === "fractional-preflight") {
+      const errors: string[] = [];
+      const requests: Array<[string, Record<string, unknown>]> = [
+        ["plasticity_create_helix", { axisStartMm: [0,0,0], axisEndMm: [0,0,5], radiusMm: 3.6, turns: 2.5, radialDirection: [1,0,0], handedness: "right" }],
+        ["plasticity_create_printed_external_thread", { ...definition, axisStartMm: [0,0,0], axis: [0,0,1], threadLengthMm: 5 }],
+        ["plasticity_cut_printed_internal_thread", { ...definition, targetId, entryCenterMm: [0,0,0], axis: [0,0,1], materialDepthMm: 4, profileClearanceMm: 0.2, cutterOvershootMm: 0.5 }],
+        ["plasticity_create_printed_hex_nut", { ...definition, entryCenterMm: [0,0,0], axis: [0,0,1], flatNormalDirection: [1,0,0], acrossFlatsMm: 12, thicknessMm: 4, minimumWallThicknessMm: 1, profileClearanceMm: 0.2, cutterOvershootMm: 0.5 }],
+        ["plasticity_create_printed_hex_screw", { ...definition, axisStartMm: [0,0,0], axis: [0,0,1], threadLengthMm: 5, flatNormalDirection: [1,0,0], headAcrossFlatsMm: 12, headHeightMm: 3, junctionOverlapMm: 0.5 }],
+      ];
+      for (const [tool, args] of requests) {
+        const before = state; let message = "";
+        try { await call(client, tool, { ...args, revision: state.revision }); } catch (error) { message = error instanceof Error ? error.message : String(error); }
+        requireCondition(/Fractional Helix turns are unsupported/.test(message), "Fractional preflight did not reject: " + tool + ": " + message);
+        state = await call(client, "plasticity_status", {});
+        requireCondition(state.revision === before.revision && state.undoDepth === before.undoDepth && state.redoDepth === before.redoDepth, "Fractional rejection changed native state/history");
+        errors.push(message);
+      }
+      while (state.undoDepth > initial.undoDepth) await mutate("plasticity_undo", {});
+      requireEmpty(state);
+      const changes = await call(client, "plasticity_changes_since", { snapshotId: snapshot.snapshotId });
+      requireCondition(!hasSceneContentChanges(changes.diff), "Fractional preflight fixture not restored");
+      const durable = await call(client, "plasticity_construction_history", { limit: 100 });
+      requireCondition(durable.total === 9 && durable.entries.filter((entry: any) => entry.status === "failed").length === 5, "Fractional preflight durable history mismatch");
+      evidence.preflight = { rejectedTools: requests.map(([tool]) => tool), errors, noNativeRecipeMutation: true };
+      evidence.cleanup = { restoredEmptyDocument: true }; evidence.completedAt = new Date().toISOString();
+      await writeExclusive(join(output, "evidence.json"), sanitizeEvidence(evidence));
+      console.log(JSON.stringify({ ok: true, output })); return;
+    }
+    const nominalMin = options.case.startsWith("internal-") ? [-8,-8,0] : options.case.startsWith("hex-nut") ? [-6,-4*Math.sqrt(3),0] : options.case === "hex-screw" ? [-6,-4*Math.sqrt(3),-3] : [-4,-4,0];
+    const nominalMax = options.case.startsWith("internal-") ? [8,8,4] : options.case.startsWith("hex-") ? [6,4*Math.sqrt(3),4] : [4,4,4];
+    // Fixed 0.01 mm envelope; native temporary intersections also validate legacy geometry.
+    const envelopeProbeIds: number[] = [];
+    for (let axis = 0; axis < 3; axis += 1) for (const side of [-1, 1]) {
+      const origin = [-32,-32,-32]; const size = [64,64,64];
+      if (side > 0) { origin[axis] = nominalMax[axis]! + 0.01; size[axis] = 32 - origin[axis]!; }
+      else size[axis] = nominalMin[axis]! - 0.01 + 32;
+      const beforeIds = new Set(state.bodies.map((body: any) => body.id));
+      await mutate("plasticity_create_box", { originMm: origin, sizeMm: size });
+      const added = state.bodies.filter((body: any) => !beforeIds.has(body.id)); requireCondition(added.length === 1, "Envelope probe creation failed"); envelopeProbeIds.push(added[0].id);
     }
     const source = state;
     const sourceSnapshot = await call(client, "plasticity_capture_snapshot", { label: "thread-tool-source" });
@@ -100,16 +147,16 @@ async function main(): Promise<void> {
       report = await mutate("plasticity_create_printed_external_thread", { ...definition, axisStartMm: [0, 0, 0], axis: [0, 0, 1], threadLengthMm: 4 });
     } else if (options.case.startsWith("internal-")) {
       steps = 4;
-      report = await mutate("plasticity_cut_printed_internal_thread", { ...definition, targetId, entryCenterMm: [0, 0, 0], axis: [0, 0, 1], materialDepthMm: 4, profileClearanceMm: 0.2, cutterOvershootMm: 0.5 });
-    } else if (options.case === "hex-nut") {
-      report = await mutate("plasticity_create_printed_hex_nut", { ...definition, entryCenterMm: [0, 0, 0], axis: [0, 0, 1], flatNormalDirection: [1, 0, 0], acrossFlatsMm: 12, thicknessMm: 4, minimumWallThicknessMm: 1, profileClearanceMm: 0.2, cutterOvershootMm: 0.5 });
+      report = await mutate("plasticity_cut_printed_internal_thread", { ...definition, targetId, entryCenterMm: [0, 0, 0], axis: [0, 0, 1], materialDepthMm: 4, profileClearanceMm: 0.2, cutterOvershootMm: overshoot });
+    } else if (options.case.startsWith("hex-nut")) {
+      report = await mutate("plasticity_create_printed_hex_nut", { ...definition, entryCenterMm: [0, 0, 0], axis: [0, 0, 1], flatNormalDirection: [1, 0, 0], acrossFlatsMm: 12, thicknessMm: 4, minimumWallThicknessMm: 1, profileClearanceMm: 0.2, cutterOvershootMm: overshoot });
     } else {
       steps = 9;
       report = await mutate("plasticity_create_printed_hex_screw", { ...definition, axisStartMm: [0, 0, 0], axis: [0, 0, 1], threadLengthMm: 4, flatNormalDirection: [1, 0, 0], headAcrossFlatsMm: 12, headHeightMm: 3, junctionOverlapMm: 0.5 });
     }
     evidence.recipe = report;
     requireCondition(report.status === "completed" && report.undoSteps === steps && report.steps.length === steps && state.undoDepth === source.undoDepth + steps, "Thread recipe/native history contract mismatch");
-    near(report.turns, female ? 2.5 : 2, 1e-12, "reported helix turns");
+    near(report.turns, female ? extendedLength / 2 : 2, 1e-12, "reported helix turns");
     requireCondition(report.geometry.profile === "rounded-print-v1", "Unexpected printed-thread profile");
     near(report.geometry.nominalCrestDiameterMm, 8, 1e-12, "crest diameter"); near(report.geometry.coreDiameterMm, 6.4, 1e-12, "core diameter"); near(report.geometry.helixDiameterMm, 7.2, 1e-12, "helix diameter"); near(report.geometry.maleProfileDiameterMm, 0.88, 1e-12, "male profile diameter");
     if (female) { near(report.geometry.femaleBoreDiameterMm, 6.8, 1e-12, "bore diameter"); near(report.geometry.femaleGrooveDiameterMm, 1.28, 1e-12, "groove diameter"); near(report.geometry.femaleGrooveOuterDiameterMm, 8.48, 1e-12, "groove outer diameter"); }
@@ -121,40 +168,46 @@ async function main(): Promise<void> {
       const beforeRead = state;
       const solids = state.bodies.filter((body: any) => body.type === "Solid");
       const wires = state.bodies.filter((body: any) => body.type === "Wire");
-      requireCondition(solids.length === 2 && wires.length === (profileId === undefined ? 1 : 2) && state.bodies.length === solids.length + wires.length, "Unexpected thread result, retained profiles or leftover cutters");
+      requireCondition(solids.length === 2 + envelopeProbeIds.length && wires.length === (profileId === undefined ? 1 : 2) && state.bodies.length === solids.length + wires.length, "Unexpected thread result, retained profiles or leftover cutters");
       requireCondition(JSON.stringify(state.bodies.find((body: any) => body.id === controlId)) === JSON.stringify(source.bodies.find((body: any) => body.id === controlId)), "Thread recipe changed the unrelated control body");
+      for (const original of source.bodies.filter((body: any) => body.id !== targetId)) requireCondition(JSON.stringify(state.bodies.find((body: any) => body.id === original.id)) === JSON.stringify(original), "Thread recipe changed an envelope probe/control");
       const result = solids.find((body: any) => body.id === resultId);
       requireCondition(result && wires.some((body: any) => body.id === report.helixBodyId), "Thread body or editable Helix ID missing");
       requireCondition(report.consumedToolIds.every((id: number) => !state.bodies.some((body: any) => body.id === id)), "Thread recipe left a consumed cutter");
       const ids = solids.map((body: any) => body.id);
       const validation = await call(client!, "plasticity_validate_bodies", { ids, revision: state.revision });
-      requireCondition(validation.bodies.length === 2 && ids.every((id: number) => validation.bodies.some((body: any) => body.id === id && body.nativeValid && body.printableSolid && body.nativeCheckCodes.length === 0)), "Thread output failed native Solid validation");
+      requireCondition(validation.bodies.length === ids.length && ids.every((id: number) => validation.bodies.some((body: any) => body.id === id && body.nativeValid && body.printableSolid && body.nativeCheckCodes.length === 0)), "Thread output failed native Solid validation");
       const mass = await call(client!, "plasticity_measure_solid_properties", { ids, revision: state.revision });
-      requireCondition(mass.bodies.length === 2 && ids.every((id: number) => mass.bodies.some((body: any) => body.id === id)), "Incomplete thread mass identities");
+      requireCondition(mass.bodies.length === ids.length && ids.every((id: number) => mass.bodies.some((body: any) => body.id === id)), "Incomplete thread mass identities");
       near(mass.bodies.find((body: any) => body.id === controlId).volumeMm3, 24, 0.0001, "control volume");
       const volume = mass.bodies.find((body: any) => body.id === resultId).volumeMm3;
       const hexArea = 72 * Math.sqrt(3);
-      const blankVolume = options.case === "hex-nut" ? hexArea * 4 : 1024;
+      const blankVolume = options.case.startsWith("hex-nut") ? hexArea * 4 : 1024;
       const lower = female ? blankVolume - Math.PI * 4.24 ** 2 * 4 : options.case === "hex-screw" ? hexArea * 3.5 + Math.PI * 3.2 ** 2 * 3.5 : Math.PI * 3.2 ** 2 * 4;
       const upper = female ? blankVolume - Math.PI * 3.4 ** 2 * 4 : options.case === "hex-screw" ? hexArea * 3.5 + Math.PI * 4 ** 2 * 3.5 : Math.PI * 4 ** 2 * 4;
       requireCondition(Number.isFinite(volume) && volume > lower + 0.001 && volume < upper - 0.001, `Thread volume ${volume} is outside independent geometric bounds [${lower}, ${upper}]`);
       if (initialVolume === undefined) initialVolume = volume; else near(volume, initialVolume, 0.0001, "thread volume after Redo");
       evidence.massReadback = { validation, massProperties: mass.bodies, volumeBoundsMm3: [lower, upper] };
-      const minimum = options.case.startsWith("internal-") ? [-8, -8, 0] : options.case === "hex-nut" ? [-6, -4 * Math.sqrt(3), 0] : options.case === "hex-screw" ? [-6, -4 * Math.sqrt(3), -3] : [-4, -4, 0];
+      const minimum = options.case.startsWith("internal-") ? [-8, -8, 0] : options.case.startsWith("hex-nut") ? [-6, -4 * Math.sqrt(3), 0] : options.case === "hex-screw" ? [-6, -4 * Math.sqrt(3), -3] : [-4, -4, 0];
       const maximum = options.case.startsWith("internal-") ? [8, 8, 4] : profileId === undefined ? [4, 4, 4] : [6, 4 * Math.sqrt(3), 4];
       // Collect independent read-only diagnostics before reporting a qualification failure.
       const failures: string[] = [];
       const verify = (check: () => void): void => { try { check(); } catch (error) { failures.push(error instanceof Error ? error.message : String(error)); } };
       // Explicit custom-thread envelope tolerance, fixed before live execution.
-      verify(() => vectorNear(result.boundsMm.min, minimum, 0.01, "thread envelope minimum"));
-      verify(() => vectorNear(result.boundsMm.max, maximum, 0.01, "thread envelope maximum"));
+      if (result.boundsMethod === "native-extrema") {
+        verify(() => vectorNear(result.boundsMm.min, minimum, 0.01, "thread envelope minimum"));
+        verify(() => vectorNear(result.boundsMm.max, maximum, 0.01, "thread envelope maximum"));
+      } else requireCondition(result.boundsMethod === "native-box" && [...result.boundsMm.min, ...result.boundsMm.max].every((value: number) => Math.abs(value) < 32), "Unknown/out-of-probe-range body box");
+      const containment = await call(client!, "plasticity_check_interference", { pairs: envelopeProbeIds.map(id => ({ firstBodyId: resultId, secondBodyId: id })), revision: state.revision });
+      requireCondition(containment.pairs.length === 6 && containment.pairs.every((pair: any) => pair.status === "no-volumetric-interference"), "Native thread material escapes the 0.01 mm envelope");
+      evidence.envelope = { boundsMethod: result.boundsMethod, toleranceMm: 0.01, containment };
       const radius = female ? 3.4 : 3.2;
       requireCondition(result.faces.some((face: any) => face.surfaceType === "Cylinder" && Math.abs(face.radiusMm - radius) <= 0.01), "Expected exact bore/core Cylinder carrier missing");
       const directions = await call(client!, "plasticity_list_curve_directions", {});
       const helix = directions.curves.find((curve: any) => curve.id === report.helixBodyId);
       requireCondition(directions.revision === state.revision && helix?.measurementSource === "native-brep" && helix.segments.length === 1 && !helix.closed, "Native single-segment Helix report missing/stale");
-      const segment = helix.segments[0]; const length = female ? 5 : 4;
-      verify(() => near(segment.lengthMm, Math.hypot(2 * Math.PI * 3.6 * (female ? 2.5 : 2), length), 0.001, "analytic Helix length"));
+      const segment = helix.segments[0]; const length = female ? extendedLength : 4;
+      verify(() => near(segment.lengthMm, Math.hypot(2 * Math.PI * 3.6 * (female ? extendedLength / 2 : 2), length), 0.001, "analytic Helix length"));
       const evaluated = await call(client!, "plasticity_evaluate_curve_segments", { samples: [0, 0.125, 0.375, 0.625, 0.875, 1].map(normalizedParameter => ({ bodyId: report.helixBodyId, segmentEntityId: segment.entityId, normalizedParameter })), revision: state.revision });
       requireCondition(evaluated.samples.length === 6 && evaluated.revision === state.revision, "Native Helix samples incomplete/stale");
       evidence.helixReadback = { helix, samples: evaluated.samples };
@@ -162,18 +215,18 @@ async function main(): Promise<void> {
         requireCondition(sample.measurementSource === "native-brep", "Helix sample is not native");
         const [x, y, z] = sample.positionMm; const [tx, ty, tz] = sample.tangent;
         near(Math.hypot(x, y), 3.6, 0.001, "sampled Helix radius");
-        verify(() => requireCondition(z >= (female ? -0.5 : 0) - 0.001 && z <= (female ? 4.5 : 4) + 0.001, "Helix sample escaped explicit axial range"));
+        verify(() => requireCondition(z >= (female ? -overshoot : 0) - 0.001 && z <= (female ? 4 + overshoot : 4) + 0.001, "Helix sample escaped explicit axial range"));
         const chirality = (x * ty - y * tx) * tz;
         verify(() => requireCondition(handedness === "right" ? chirality > 1e-6 : chirality < -1e-6, "Helix chirality disagrees with requested handedness in the right-handed XYZ frame"));
       }
       const ends = [evaluated.samples[0].positionMm[2], evaluated.samples.at(-1).positionMm[2]].sort((a: number, b: number) => a - b);
-      verify(() => vectorNear(ends, female ? [-0.5, 4.5] : [0, 4], 0.001, "Helix axial ends"));
+      verify(() => vectorNear(ends, female ? [-overshoot, 4 + overshoot] : [0, 4], 0.001, "Helix axial ends"));
       if (profileId !== undefined) {
         const profile = directions.curves.find((curve: any) => curve.id === profileId);
         requireCondition(profile?.closed && profile.segments.length === 6, "Editable hex profile missing");
         for (const line of profile.segments) near(line.lengthMm, 4 * Math.sqrt(3), 0.00001, "hex side length");
       }
-      if (options.case === "hex-nut") near(report.actualMinimumWallThicknessMm, 1.76, 1e-12, "reported nut minimum wall");
+      if (options.case.startsWith("hex-nut")) near(report.actualMinimumWallThicknessMm, 1.76, 1e-12, "reported nut minimum wall");
       evidence.geometry = { validation, massProperties: mass.bodies, volumeBoundsMm3: [lower, upper], helix, samples: evaluated.samples, envelopeToleranceMm: 0.01 };
       evidence.qualificationFailures = failures;
       state = await call(client!, "plasticity_status", {});
@@ -192,6 +245,12 @@ async function main(): Promise<void> {
     requireEmpty(state);
     const changes = await call(client, "plasticity_changes_since", { snapshotId: snapshot.snapshotId });
     requireCondition(!hasSceneContentChanges(changes.diff), "Initial empty thread fixture snapshot not restored");
+    const durable = await call(client, "plasticity_construction_history", { limit: 100 });
+    const expectedEvents = 2 * (source.undoDepth - initial.undoDepth) + 3 * steps + 1;
+    requireCondition(durable.total === expectedEvents && durable.entries.length === expectedEvents && durable.entries.every((entry: any) => entry.status === "completed"), "Durable thread history is incomplete");
+    const journal = await call(client, "plasticity_construction_journal", {});
+    requireCondition(journal.durableSyncStatus === "in-sync", "Durable thread history is out of sync");
+    evidence.durableHistory = { events: durable.total, syncStatus: journal.durableSyncStatus };
     evidence.undoRedo = true;
     evidence.cleanup = { restoredEmptyDocument: true, sceneContentsRestored: true };
     evidence.completedAt = new Date().toISOString();

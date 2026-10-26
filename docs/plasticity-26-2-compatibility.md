@@ -61,6 +61,14 @@ on both success and rejection. Remote debugging remains bound to loopback.
   Malformed entries reject explicitly. Public appearance ID zero is translated
   to the native unset value for clearing an assignment inside the owned command.
 
+- Solid/Sheet bounds use native support extrema when the kernel exposes them.
+  Older kernels and Wires retain conservative boxes with explicit `boundsMethod`
+  provenance. Cache format 3 invalidates the previous descriptors/revisions.
+- Native Helices currently require whole positive turns. Thread recipes check
+  their length/pitch and extended female-cutter turns before any geometry step.
+  Fractional parameters reject explicitly on both versions; no dimensions or
+  pitch are silently adjusted. See [bounds and Helix compatibility](native-bounds-and-helix.md).
+
 ## Catalog audit follow-up
 
 The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every
@@ -120,12 +128,13 @@ The supplied clearances remain geometric test inputs, not qualified print fits,
 insert-retention ratings or snap-strength evidence. Per-version outcomes remain
 in the [catalog audit](plasticity-26-2-catalog-audit.md).
 
-Standalone custom rounded-thread fixtures subsequently failed on both versions:
+The initial standalone custom rounded-thread fixtures failed on both versions:
 all six tested cases exceeded their declared native body-box envelope, and
 2.5-turn female Helices exceeded their requested length/end. Native Check,
 bounded-volume and sampled handedness checks passed, but those partial results
-do not accept the workflows. The same observations occur on 26.1.3; no adapter
-change or tolerance relaxation was made. See [standalone thread qualification](plasticity-26-2-catalog-audit.md#standalone-printed-thread-qualification).
+do not accept the workflows. The same observations occur on 26.1.3; the initial audit made no adapter change or tolerance relaxation. The later
+[bounds/whole-turn correction](native-bounds-and-helix.md) qualifies an explicitly
+bounded whole-turn subset and rejects fractional requests before geometry. See [standalone thread qualification](plasticity-26-2-catalog-audit.md#standalone-printed-thread-qualification).
 
 ## Initial live coverage
 

@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { isolatedAcceptanceEnvironment } from "./verify-native-measure-datum-files-live.ts";
+
 import { hydrateNativeState } from "./native-live-state.ts";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -76,8 +78,9 @@ async function main(): Promise<void> {
     evidence.initial = stateSummary(initialState);
     const snapshot = await call(live.client, "plasticity_capture_snapshot", { label: "printed-thread-calibration-live-initial-empty" });
 
+    evidence.fixtureParameters = { screwThreadLengthMm: 10, nutThicknessMm: 8, pitchMm: 1.25, cutterOvershootMm: 1 };
     const calibration = await call(live.client, "plasticity_create_printed_thread_calibration_set", {
-      designation: "калибровочный печатный винт M5x8",
+      designation: "калибровочный печатный винт M5x10",
       pitchMm: 1.25,
       threadDepthMm: 0.6,
       handedness: "right",
@@ -91,7 +94,7 @@ async function main(): Promise<void> {
       nutAcrossFlatsMm: 9,
       nutThicknessMm: 8,
       nutMinimumWallThicknessMm: 1.5,
-      cutterOvershootMm: 0.5,
+      cutterOvershootMm: 1,
       screwName: "Disposable thread calibration screw",
       samples: [
         { id: "clearance-0.10", nutEntryCenterMm: [15, 0, 0], profileClearanceMm: 0.1 },
@@ -114,7 +117,7 @@ async function main(): Promise<void> {
     requireCondition(calibration.qualificationStatus === "requires-physical-fit-test", "Calibration result incorrectly claimed physical qualification");
     requireCondition(calibration.undoSteps === 21 && calibration.steps.length === 21, "Calibration set did not return all 21 native history steps");
     requireCondition(calibration.samples?.length === 2, "Calibration set did not return two nut samples");
-    requireCondition(calibration.designation?.nominalCrestDiameterMm === 5 && calibration.designation?.threadLengthMm === 8, "Calibration designation did not derive M5x8 dimensions");
+    requireCondition(calibration.designation?.nominalCrestDiameterMm === 5 && calibration.designation?.threadLengthMm === 10, "Calibration designation did not derive M5x10 dimensions");
 
     const state = await call(live.client, "plasticity_status", {});
     const screw = requireBody(state, calibration.screw.resultBodyId, "calibration screw");
@@ -174,7 +177,7 @@ function summarizeSample(sample: any, body: any): Record<string, unknown> {
 }
 function requireBody(state: any, id: number, label: string): any { const body = state.bodies.find((candidate: any) => candidate.id === id); requireCondition(body?.type === "Solid", `${label} ${id} is not a current Solid`); return body; }
 function requireCylinderRadius(body: any, expectedMm: number): number { const radius = body.faces.find((face: any) => face.surfaceType === "Cylinder" && Number.isFinite(face.radiusMm) && Math.abs(face.radiusMm - expectedMm) <= 0.01)?.radiusMm; requireCondition(Number.isFinite(radius), `Body ${body.id} has no exact cylindrical face with radius ${expectedMm} mm`); return radius; }
-async function startMcp(storeRoot: string): Promise<LiveMcp> { const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" }, stderr: "pipe" }); const stderr: string[] = []; transport.stderr?.on("data", (chunk) => { stderr.push(String(chunk).slice(-4096)); while (stderr.join("").length > 16384) stderr.shift(); }); const client = new Client({ name: "plasticity-printed-thread-calibration-live", version: "1.0.0" }); await client.connect(transport); return { client, stderr }; }
+async function startMcp(storeRoot: string): Promise<LiveMcp> { const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env: isolatedAcceptanceEnvironment(storeRoot, process.env), stderr: "pipe" }); const stderr: string[] = []; transport.stderr?.on("data", (chunk) => { stderr.push(String(chunk).slice(-4096)); while (stderr.join("").length > 16384) stderr.shift(); }); const client = new Client({ name: "plasticity-printed-thread-calibration-live", version: "1.0.0" }); await client.connect(transport); return { client, stderr }; }
 async function call(client: Client, name: string, args: Record<string, unknown>): Promise<any> { const response = await client.callTool({ name, arguments: args }); const output = toolText(response); if ("isError" in response && response.isError) throw new Error(output); return await hydrateNativeState(JSON.parse(output), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision })); }
 function toolText(response: unknown): string { if (typeof response !== "object" || response === null || !("content" in response) || !Array.isArray(response.content)) throw new Error("MCP tool returned no content"); const item = response.content.find((entry): entry is { type: "text"; text: string } => typeof entry === "object" && entry !== null && "type" in entry && entry.type === "text" && "text" in entry && typeof entry.text === "string"); if (!item) throw new Error("MCP tool returned no text content"); return item.text; }
 async function recover(client: Client, initial: any): Promise<Record<string, unknown>> { for (let count = 0; count < 32; count += 1) { const state = await call(client, "plasticity_status", {}); if (state.documentToken !== initial.documentToken) return { restoredEmptyDocument: false, reason: "document-changed" }; if (state.undoDepth <= initial.undoDepth) return { restoredEmptyDocument: state.bodies.length === 0 && state.regions.length === 0 }; await call(client, "plasticity_undo", { intent: "Recover disposable printed-thread calibration acceptance", revision: state.revision }); } return { restoredEmptyDocument: false, reason: "undo-limit" }; }
@@ -183,7 +186,6 @@ function requireEmpty(state: any, label: string): void { requireCondition(state.
 function stateSummary(state: any): Record<string, unknown> { return { documentToken: state.documentToken, revision: state.revision, undoDepth: state.undoDepth, redoDepth: state.redoDepth, bodyCount: state.bodies.length, regionCount: state.regions.length }; }
 function near(actual: number, expected: number, tolerance: number, label: string): void { requireCondition(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, `${label}: expected ${expected} ± ${tolerance}, got ${actual}`); }
 function requireCondition(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> { return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : [])); }
 function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 4000); }
 async function writeExclusive(path: string, value: unknown): Promise<void> { await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 }); }
 

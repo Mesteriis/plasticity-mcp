@@ -1,6 +1,7 @@
 import { CdpClient } from "../cdp/client.ts";
 import type { PlasticityTarget } from "../cdp/discovery.ts";
 import type { ConstructionPlaneDescriptor } from "./construction.ts";
+import { NATIVE_BODY_BOUNDS } from "./native-bounds.ts";
 import { nativeFunction } from "./native-function.ts";
 import { discoverStoreBindings } from "./native-discovery.ts";
 
@@ -138,6 +139,7 @@ export interface RuntimeState {
     hidden?: boolean;
     locked?: boolean;
     boundsMm: { min: [number, number, number]; max: [number, number, number] } | null;
+    boundsMethod?: "native-box" | "native-extrema";
     faceIds: string[];
     edgeIds: string[];
     faces: Array<{
@@ -290,7 +292,7 @@ export class PlasticityRuntime {
   }
 
   async getState(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState> {
-    const result = await this.readNative<Omit<RuntimeState, "targetId" | "title">>(nativeFunction`function (ConstructionPlaneDatabase, Vector, Quaternion) {
+    const result = await this.readNative<Omit<RuntimeState, "targetId" | "title">>(nativeFunction`function (ConstructionPlaneDatabase, Vector, Quaternion, pk_default) {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => [value.x, value.y, value.z];
@@ -369,17 +371,20 @@ export class PlasticityRuntime {
       // body version's topology is immutable: read it once per body view
       // and versionId and reuse it across state reads.
       // Invalidate descriptors from an older adapter even when the body view is unchanged.
-      const topologyFormat = 2;
+      const topologyFormat = 3;
+      const readBodyBounds = (${NATIVE_BODY_BOUNDS})(pk_default.a);
       const topologyCacheKey = Symbol.for('plasticity-mcp.body-topology');
       const topologyCache = globalThis[topologyCacheKey] ?? (globalThis[topologyCacheKey] = new WeakMap());
       const readTopology = (item, bodyType) => {
         const isBrepShell = bodyType === 'Solid' || bodyType === 'Sheet';
         const isWire = bodyType === 'Wire';
         let box = null;
-        if (typeof item.model?.FindBox === 'function') {
-          if (isWire) {
-            try { box = item.model.FindBox(); } catch {}
-          } else box = item.model.FindBox();
+        let boundsMethod = 'native-box';
+        if (isWire) {
+          try { box = item.model.FindBox(); } catch {}
+        } else {
+          const measured = readBodyBounds(item.model, bodyType);
+          box = measured.box; boundsMethod = measured.method;
         }
         // Wire B-curve segments have their own segmentEntityId API. Some
         // Plasticity rebuild results expose transient high-edge views that are
@@ -539,6 +544,7 @@ export class PlasticityRuntime {
         const edgeIds = Array.from(edgeViews?.versionIds ?? []).map(String);
         return {
           boundsMm: box ? { min: vector(box.min), max: vector(box.max) } : null,
+          boundsMethod,
           faceIds,
           edgeIds,
           faces,
@@ -876,7 +882,7 @@ export class PlasticityRuntime {
       const dbVersion = Number.isFinite(nativeApi.db?.version) ? nativeApi.db.version : null;
       const undoDepth = this.history?.undoStack?.length ?? 0;
       const redoDepth = this.history?.redoStack?.length ?? 0;
-      const bodyToken = 'bodies:' + token(bodies.map(x => [x.id, x.versionId, x.materialId, x.visible, x.hidden, x.locked].join(':')).join(','));
+      const bodyToken = 'bodies:v' + topologyFormat + ':' + token(bodies.map(x => [x.id, x.versionId, x.materialId, x.visible, x.hidden, x.locked, x.boundsMethod].join(':')).join(','));
       const materialToken = 'materials:' + token(JSON.stringify(materials));
       const measurementToken = 'measurements:' + token(JSON.stringify(measurements));
       const instanceToken = 'instances:' + token(JSON.stringify(instances));
@@ -901,7 +907,7 @@ export class PlasticityRuntime {
         regions,
         bodies,
       };
-    }`, ["ConstructionPlaneDatabase", "Vector3", "Quaternion"], [], timeoutMs);
+    }`, ["ConstructionPlaneDatabase", "Vector3", "Quaternion", "pk_default"], [], timeoutMs);
     return { targetId: this.target.id, title: this.target.title, ...result };
   }
 

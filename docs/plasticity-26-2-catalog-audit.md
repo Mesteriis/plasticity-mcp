@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 130 | 138 |
-| Failing or blocked fixtures | 13 | 13 |
-| Tools with success in an application-connected passing fixture | 237 | 279 |
-| Tools attempted only in unaccepted fixtures | 14 | 14 |
-| Tools without a recorded application-connected live call | 120 | 78 |
+| Completed passing fixtures | 139 | 147 |
+| Failing or blocked fixtures | 12 | 10 |
+| Tools with success in an application-connected passing fixture | 247 | 289 |
+| Tools attempted only in unaccepted fixtures | 10 | 8 |
+| Tools without a recorded application-connected live call | 114 | 74 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -582,6 +582,9 @@ build. The build retains the advisory warning about chunks larger than 500 kB.
 
 ## Standalone printed-thread qualification
 
+The following initial results are historical; the correction and qualified
+inputs are recorded in the next section.
+
 Six standalone public-tool scenarios were executed on each experimental copy.
 **0/6 passed on either version.** All six failed the predeclared 0.01 mm nominal
 body-envelope check; the internal-thread and nut cases also failed their Helix
@@ -650,3 +653,51 @@ Automated checks: `npm test` passed 1458 tests, `npm run typecheck` passed,
 Workbench passed 90 tests, its typecheck and production build. The build retains
 the advisory warning about chunks larger than 500 kB. These green automated
 checks do not qualify any of the six failing live scenarios.
+
+
+## Bounds and whole-turn thread correction
+
+Native `FindBox` includes empty space around trimmed spline surfaces. The
+26.2.1 adapter now uses native `Eval.Extremes` for Solid/Sheet bounds, with
+`boundsMethod: native-extrema`. The 26.1.3 kernel has no such capability and
+retains conservative `native-box` bounds. Failed extrema evaluations raise an
+error. Optional provenance survives compact summaries and durable history;
+old history remains readable. See [the API and input constraints](native-bounds-and-helix.md).
+
+Fractional Helix turns are rejected before geometry creation on both versions.
+No pitch, length or overshoot is silently adjusted. All composed recipes check
+members' turn constraints before their first geometry step.
+
+Seven scenarios now pass on **both copies (7/7 each)**: external right/left,
+internal right/left with explicit 1 mm overshoot, hex nut with explicit 1 mm
+overshoot, hex screw, and fractional preflight. Native extrema where available
+and six temporary B-Rep envelope intersections distinguish actual material from
+conservative boxes. The original 0.01 mm envelope and 0.001 mm Helix tolerances
+remain. The supported recipes pass native checks, sampled curve length/end and
+handedness, full Undo/Redo with stable IDs, source restoration and exact durable
+history counts/synchronization. Fractional preflight rejects direct Helix and
+all four standalone tools without changing revision or native history.
+
+The M5 pair also passes on each version using **explicit 1 mm cutter overshoot**
+and matching axial phase translation: no interference aligned, interference at
+90 degrees, and Undo restores alignment. The original 8 mm nut / 1.25 mm pitch /
+0.5 mm overshoot requests 7.2 turns and is retained as
+`unsupported-fractional-turns`, not accepted with altered inputs.
+
+The two-nut calibration set passes on both copies with explicit M5x10 screw
+length and 1 mm cutter overshoot (eight turns each). The original M5x8 /
+0.5 mm overshoot fixture rejects before geometry and remains unsupported; its
+previous successful call is not retained as current acceptance. This calibration
+fixture checks native validity, clearance-dependent volume and cleanup Undo;
+full Redo is covered by the standalone fixtures rather than this set.
+
+On 26.2.1, strict STEP provenance and cable-channel bounds now pass, and Surface
+Bridge passes again with Sheet extrema (3/3). Legacy strict STEP/cable box gates
+remain unaccepted; no exact legacy box claim is made. Circular-imprint and
+rendering gaps remain. The matrix preserves unsupported original fractional
+fixtures and separates them from the explicit supported variants.
+
+Final automated checks: 1466 root tests and 90 Workbench tests pass; both
+typechecks and the Workbench build pass. The build retains its advisory warning
+about chunks larger than 500 kB. Both experimental documents were restored empty
+and idle; installed application and security settings were unchanged.

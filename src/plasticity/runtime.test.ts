@@ -107,6 +107,7 @@ test("reads a body version's native topology once and reuses it until the body c
     return {
       view: Object.assign(new Solid(), { high: { faces: views(101, "11"), edges: views(201, "12") } }),
       model: {
+        Id: () => 1000,
         FindBox() { calls.FindBox += 1; return box; },
         GetFaces() { calls.GetFaces += 1; return { Size: () => 1, Get: () => face }; },
         GetEdges() { calls.GetEdges += 1; return { Size: () => 1, Get: () => edge }; },
@@ -143,6 +144,7 @@ test("reads a body version's native topology once and reuses it until the body c
     ConstructionPlaneDatabase: { Top: plane, Bottom: plane, Left: plane, Right: plane, Front: plane, Back: plane },
     Vector3: class {},
     Quaternion: class {},
+    pk_default: { a: {} },
   };
   const client = {
     async send(method: string, params: Record<string, unknown> = {}) {
@@ -166,7 +168,7 @@ test("reads a body version's native topology once and reuses it until the body c
   const second = await runtime.getState();
   assert.deepEqual(calls, { FindBox: 1, GetFaces: 1, GetEdges: 1 });
   assert.deepEqual(second.bodies, first.bodies);
-  assert.equal(cache.get(geometryModel.get(21)!.view).format, 2, "old adapter cache entries must be rebuilt");
+  assert.equal(cache.get(geometryModel.get(21)!.view).format, 3, "old adapter cache entries must be rebuilt");
   assert.equal(first.bodies[0]?.faces[0]?.id, "11");
   assert.deepEqual(first.bodies[0]?.edges[0]?.faceIds, ["11"]);
   assert.deepEqual(first.bodies[0]?.vertices?.[0]?.edgeIds, ["12"], "incoming and outgoing vertex edges must be combined without duplicates");
@@ -205,6 +207,24 @@ test("reads a body version's native topology once and reuses it until the body c
   assert.deepEqual(calls, { FindBox: 5, GetFaces: 5, GetEdges: 5 }, "a reopened document with reused numeric IDs and new views rereads topology");
   assert.equal(reopened.bodies[0]?.materialId, 3);
   assert.equal(reopened.bodies[0]?.visible, false);
+  assert.equal(reopened.bodies[0]?.boundsMethod, "native-box");
+  let extremaCalls = 0;
+  natives.pk_default = { a: {
+    Context: { Get: () => ({}) },
+    Eval: class { Extremes(ids: Int32Array, directions: Float64Array) {
+      assert.deepEqual([...ids], Array(6).fill(1000)); assert.equal(directions.length, 54); extremaCalls += 1;
+      return { ok: 6, errors: new Int32Array(6), extremes: Float64Array.of(0.0015,0,0, 0,0,0, 0,0.001,0, 0,0,0, 0,0,0, 0,0,0) };
+    } },
+  } };
+  geometryModel.set(22, makeItem());
+  const exact = await runtime.getState();
+  assert.equal(exact.bodies[0]?.boundsMethod, "native-extrema");
+  assert.deepEqual(exact.bodies[0]?.boundsMm, { min: [0,0,0], max: [1.5,1,0] });
+  assert.notEqual(exact.revision, reopened.revision);
+  await runtime.getState();
+  assert.equal(extremaCalls, 1, "tight bounds share the body-version topology cache");
+  assert.equal(calls.FindBox, 5, "modern Solid state must not read the conservative box");
+
 });
 
 function appearanceStateHarness(entries: unknown[]) {
@@ -219,7 +239,7 @@ function appearanceStateHarness(entries: unknown[]) {
     measurements: { snapshot: () => ({ repo: { measurements: [] } }) },
     document: { uuid: "appearance-document" }, history: { undoStack: [], redoStack: [] },
   };
-  const natives: Record<string, unknown> = { ConstructionPlaneDatabase: { Top: plane, Bottom: plane, Left: plane, Right: plane, Front: plane, Back: plane }, Vector3: class {}, Quaternion: class {} };
+  const natives: Record<string, unknown> = { ConstructionPlaneDatabase: { Top: plane, Bottom: plane, Left: plane, Right: plane, Front: plane, Back: plane }, Vector3: class {}, Quaternion: class {}, pk_default: { a: {} } };
   const client = {
     async send(method: string, params: Record<string, unknown> = {}) {
       assert.equal(method, "Runtime.callFunctionOn");
