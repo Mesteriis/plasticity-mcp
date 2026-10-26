@@ -316,5 +316,7 @@ attempted-unaccepted.
 HTML distance labels: [guarded lifecycle acceptance](html-measurement-labels.md)
 passes on experimental 26.2.1 and 26.1.3. Text, viewport attachment, DOM rectangles,
 camera anchors, numeric updates, deletion and Undo/Redo are checked. This does
-not accept rasterized HTML glyphs/full-window capture; transform-time loss of
-measurement names remains unresolved.
+not accept rasterized HTML glyphs/full-window capture; item-transform measurement names now survive the tested history lifecycle.
+Other command families/file serialization are not covered. External three-phase
+window review remains unaccepted on both versions because some captures show
+stale scene pixels.

@@ -28,10 +28,10 @@ The fixture creates face–face, face–edge and vertex–vertex dimensions. It 
 5 mm, sqrt(50) mm, 20 mm and a moving 10→15 mm dimension; text rounded to two
 decimals; one attached, visible label per native version; its full DOM rectangle
 inside the viewport; and its CSS anchor within 0.5 CSS px of an independent
-projection of the native helper midpoint. It checks a camera change, model move,
+projection of the native helper midpoint. It checks a camera change, rotation and scale with Undo, model move,
 move Undo/Redo, delete Undo/Redo, deletion of all dimensions and empty cleanup.
 
-Both experimental versions pass all nine phases. The original stale-camera
+Both experimental versions pass all thirteen phases. The original stale-camera
 reproduction failed on both versions before the patch. Numeric and HTML-layout
 checks retain the same thresholds after the fix. Unit regressions execute the
 emitted refresh callback with RAF suspended, check a single pending frame after
@@ -46,8 +46,40 @@ prove rasterized glyph pixels, occlusion, overlap avoidance or full-window
 capture. Default window capture retains its visibility guard. Full-window HTML
 pixel acceptance remains open.
 
-A native transform replaces the moving measurement's version and loses its
-`userData.name` on both versions. Its stable ID, topology endpoints and numeric
-value remain correct. The fixture follows stable IDs and records native names;
-name persistence is a separate unresolved defect, not accepted by this test.
+A native transform replaces the moving measurement's version and originally lost
+its `userData.name` on both versions. Item move, rotate, XYZ rotation and scale
+commands now capture names by stable ID and copy missing names to surviving
+replacement versions before the command returns and history records its result.
+This is local to the command; there is no persistent name cache or prototype
+patch. Existing replacement names win, deleted IDs are not resurrected, and
+unnamed measurements remain unnamed. The fixture now requires exact names after
+rotation, scale and their Undo, move Undo/Redo, and measurement delete Undo/Redo.
+File serialization and other command families are outside this qualification.
+
+## External full-window review
+
+Add `--window-review` to pause at `created`, `model-moved` and `all-deleted`.
+Each phase writes `PHASE-review-ready.json` and waits up to 90 seconds for a real
+CUA window capture saved as `PHASE-window.jpg` in the same new output directory.
+It records the JPEG artifact hash and rejects a changed document/revision. A
+JPEG file is **not** an automatic glyph-pixel pass; manual review is mandatory.
+Default runs remain unattended DOM/layout checks. No args/`--help` remain inert.
+
+Manual three-phase review remains **unaccepted on both experimental copies**:
+
+| Version | Created | Model moved (expected 15 mm) | All dimensions deleted |
+| --- | --- | --- | --- |
+| 26.2.1 | Four expected labels visible | Stale 10.00 mm label | Stale labels remain |
+| 26.1.3 | Stale empty window | Expected 15.00 mm visible | Labels absent |
+
+Native values and DOM/layout checks passed at those same checkpoints. CUA also
+reported an initial ScreenCaptureKit failure and `noWindowsAvailable` for a
+viewport click. Raising the modern window did not provide reliable capture
+freshness. These observations do not establish whether stale pixels originate
+in the compositor, capture service or application. External review reports
+retain the original native/layout exit code separately and fail overall window
+acceptance; original full-window MCP fixtures remain failed too. A real foreground
+window and repeatable fresh captures are still needed. No visibility emulation,
+security changes or replacement rasterization are used.
+
 Installed applications, app bundles and security settings were unchanged.

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { discoverPlasticityTargets } from "../src/cdp/discovery.ts";
@@ -12,16 +14,21 @@ import { parseNativeTopologyDistanceAcceptanceArgs } from "./verify-native-topol
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export function parseMeasurementLabelsArgs(argv: string[]) {
-    const result = parseNativeTopologyDistanceAcceptanceArgs(argv);
+    const windowReview = argv.includes("--window-review");
+    const result = parseNativeTopologyDistanceAcceptanceArgs(argv.filter(arg => arg !== "--window-review"));
+    if (windowReview && result.help && !argv.includes("--help")) throw new Error("--target is required for window review");
     if (result.geometryOnly)
         throw new Error("HTML-label acceptance cannot use --geometry-only");
-    return result;
+    return { ...result, windowReview };
 }
 const HELP = `Usage: npm run accept:native-measurement-labels -- --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 No arguments or --help do not connect or mutate. Requires an empty disposable document.
 Checks actual HTML text/style/layout against native measurements and projected WebGL anchors,
 camera/model changes, deletion, Undo/Redo and cleanup. WebGL PNGs exclude HTML labels;
-this fixture does not claim rasterized HTML glyph or full-window acceptance.`;
+this fixture does not claim rasterized HTML glyph or full-window acceptance.
+--window-review pauses at created/model-moved/all-deleted for an external CUA
+window JPEG named PHASE-window.jpg in the output directory (90 seconds each).
+Image presence is recorded separately; its glyph pixels require manual review.`;
 async function main() {
     const options = parseMeasurementLabelsArgs(process.argv.slice(2));
     if (options.help) {
@@ -59,7 +66,7 @@ async function main() {
         await mutate("plasticity_create_topology_distance_measurement", { first: { type: "face-center", bodyId: first.id, faceId: face(0).id }, second: { type: "edge-midpoint", bodyId: first.id, edgeId: edge.id }, name: "Mixed" });
         await mutate("plasticity_create_vertex_distance_measurement", { first: { bodyId: first.id, vertexId: vertex(first, [0, 0, 0]).id }, second: { bodyId: first.id, vertexId: vertex(first, [20, 0, 0]).id }, name: "Width" });
         await mutate("plasticity_create_vertex_distance_measurement", { first: { bodyId: first.id, vertexId: vertex(first, [20, 0, 0]).id }, second: { bodyId: second.id, vertexId: vertex(second, [30, 0, 0]).id }, name: "Moving" });
-        // Native transforms may replace version/userData; IDs, not names, identify dimensions.
+        // IDs identify dimensions; native names must survive replacement versions too.
         const namesById = new Map<number, string>(state.measurements.map((m: any) => [m.id, m.name]));
         const movingId = state.measurements.find((m: any) => m.name === "Moving").id;
         const expected: Record<string, number> = { Thickness: 5, Mixed: Math.sqrt(50), Width: 20, Moving: 10 };
@@ -76,6 +83,7 @@ async function main() {
             for (const measurement of listed.measurements) {
                 const name = namesById.get(measurement.id);
                 ensure(name !== undefined, "Unexpected native measurement identity");
+                ensure(measurement.name === name, "Native measurement name was lost after " + phase);
                 ensure(Math.abs(measurement.distanceMm - values[name]!) < 1e-6, "Native measurement did not update: " + name);
                 const matches = observed.labels.filter((l: any) => l.versionId === String(measurement.versionId));
                 ensure(matches.length === 1, "Missing or duplicate label");
@@ -84,7 +92,13 @@ async function main() {
                 ensure(label.visible && label.inside && label.attached, "HTML label is outside its viewport or invisible");
                 ensure(label.expected && Math.abs(label.left - label.expected.x) <= 0.5 && Math.abs(label.top - label.expected.y) <= 0.5, "HTML label anchor is stale after " + phase);
             }
-            evidence.phases.push({ phase, values: { ...values }, nativeNames: listed.measurements.map((m: any) => ({ id: m.id, name: m.name })), layout: observed, capture: { captureMode: capture.captureMode, freshFrame: capture.freshFrame, rendererHidden: capture.rendererHidden } });
+            const windowImage = options.windowReview && ["created", "model-moved", "all-deleted"].includes(phase)
+                ? await awaitWindowImage(output, phase) : undefined;
+            if (windowImage) {
+                const afterReview = await call(client!, "plasticity_status", {});
+                ensure(afterReview.documentToken === state.documentToken && afterReview.revision === state.revision, "Document changed during window review");
+            }
+            evidence.phases.push({ phase, windowImage, values: { ...values }, nativeNames: listed.measurements.map((m: any) => ({ id: m.id, name: m.name })), layout: observed, capture: { captureMode: capture.captureMode, freshFrame: capture.freshFrame, rendererHidden: capture.rendererHidden } });
             delete evidence.lastObserved;
             return observed;
         };
@@ -92,6 +106,12 @@ async function main() {
         await call(client, "plasticity_set_view", { view: "top", fit: true });
         const afterCamera = await check("camera-top", expected);
         ensure(afterCamera.labels.some((l: any) => { const old = beforeCamera.labels.find((p: any) => p.versionId === l.versionId); return old && Math.hypot(l.left - old.left, l.top - old.top) > 1; }), "Camera change did not move any HTML anchor");
+        await mutate("plasticity_rotate", { ids: [second.id], pivotMm: [0, 0, 0], axis: [0, 0, 1], degrees: 90 });
+        expected.Moving = Math.sqrt(1300); await check("model-rotated", expected);
+        await mutate("plasticity_undo", {}); expected.Moving = 10; await check("rotate-undo", expected);
+        await mutate("plasticity_scale", { ids: [second.id], pivotMm: [0, 0, 0], factors: [2, 1, 1] });
+        expected.Moving = 40; await check("model-scaled", expected);
+        await mutate("plasticity_undo", {}); expected.Moving = 10; await check("scale-undo", expected);
         await mutate("plasticity_move", { ids: [second.id], deltaMm: [5, 0, 0] });
         expected.Moving = 15;
         await check("model-moved", expected);
@@ -146,6 +166,19 @@ async function main() {
     finally {
         await client?.close().catch(() => { });
     }
+}
+async function awaitWindowImage(output: string, phase: string) {
+    const path = join(output, phase + "-window.jpg");
+    await write(join(output, phase + "-review-ready.json"), { phase, image: basename(path) });
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+        let data: Buffer;
+        try { data = await readFile(path); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; await delay(250); continue; }
+        ensure(data.length >= 4 && data[0] === 255 && data[1] === 216 && data[data.length - 2] === 255 && data[data.length - 1] === 217, "Window review requires a JPEG image");
+        return { path: basename(path), bytes: data.length, sha256: createHash("sha256").update(data).digest("hex"), format: "jpeg", scope: "external-window-image-manual-review-required" };
+    }
+    throw new Error("Window review image was not supplied within 90 seconds");
 }
 async function layout(targetId: string): Promise<any> {
     const target = (await discoverPlasticityTargets(process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223")).find(t => t.id === targetId);

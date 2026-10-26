@@ -5,14 +5,14 @@
   "continuationBaseCommit": "2e1e95e19de26201f42024ac4b1cebae2a500243",
   "catalogSize": 371,
   "scope": "Production stdio MCP and explicit native-operation fixtures against separate disposable app copies. Per-tool coverage requires actual stdio calls. A tool success alone is not a guarantee for every argument or workflow.",
-  "limitations": ["Counts exclude tool successes from failing fixtures and exclude metadata-only probes.","Geometry-only measurements do not verify viewport rendering.","Unobserved tools are not accepted by this audit, including external services, solvers and manufacturing integrations.","Earlier successful PR #12 scenarios remain separate historical evidence; a current viewport failure is not relabeled as a pass.","Version coverage requires application-connected fixtures. Host-only fixture coverage is recorded separately.","Appearance and section lifecycle fixtures validate native data and history, not rendered pixels; screenshot/manual fixtures remain separate.","Native-viewport fixtures verify freshly rendered WebGL pixels, not HTML labels, CSS panels/backgrounds or operating-system window visibility. Default window capture retains its hidden-renderer guard.","HTML measurement fixtures verify DOM text, style, viewport attachment and projected anchors, not rasterized HTML glyphs or full-window pixels. Native measurement names may be lost after a transform; identity and numeric lifecycle checks use stable IDs."],
+  "limitations": ["Counts exclude tool successes from failing fixtures and exclude metadata-only probes.","Geometry-only measurements do not verify viewport rendering.","Unobserved tools are not accepted by this audit, including external services, solvers and manufacturing integrations.","Earlier successful PR #12 scenarios remain separate historical evidence; a current viewport failure is not relabeled as a pass.","Version coverage requires application-connected fixtures. Host-only fixture coverage is recorded separately.","Appearance and section lifecycle fixtures validate native data and history, not rendered pixels; screenshot/manual fixtures remain separate.","Native-viewport fixtures verify freshly rendered WebGL pixels, not HTML labels, CSS panels/backgrounds or operating-system window visibility. Default window capture retains its hidden-renderer guard.","HTML measurement fixtures verify DOM text, style, viewport attachment and projected anchors, not rasterized HTML glyphs or full-window pixels. Native measurement names are preserved inside move/rotate/scale item commands; other command families and file serialization are outside this name-persistence qualification. External window review remains unaccepted when captured glyph pixels are stale."],
   "hostOnlyFixtures": [{"id": "h01","script": "scripts/verify-interface-tensile-csv-live.ts","status": "passed","plasticityConnected": false}],
   "hostToolCounts": {"accepted-fixture": 3,"negative-only": 0},
   "versions": {
     "26.1.3": {
       "passedFixtures": 148,
-      "failedFixtures": 12,
-      "toolCounts": {"accepted-fixture": 266,"not-observed": 105},
+      "failedFixtures": 13,
+      "toolCounts": {"accepted-fixture": 267,"not-observed": 104},
       "fixtures": [
         {"script": "scripts/verify-arbitrary-section-live.ts","status": "passed","id": "f01"},
         {"script": "scripts/verify-native-3mf-export-live.ts","status": "passed","id": "f02"},
@@ -173,12 +173,13 @@
         {"script": "scripts/verify-native-section-analysis-live.ts","variant": "native-viewport","status": "passed","id": "f157"},
         {"script": "scripts/verify-native-joints-vents-live.ts","variant": "cable-channel-geometry","status": "passed","id": "f158"},
         {"script": "scripts/verify-native-measure-datum-files-live.ts","variant": "step-provenance-geometry","status": "passed","id": "f159"},
-        {"script": "scripts/verify-native-measurement-labels-live.ts","variant": "html-layout","status": "passed","id": "f160"}
+        {"script": "scripts/verify-native-measurement-labels-live.ts","variant": "html-layout","status": "passed","id": "f160"},
+        {"script": "scripts/verify-native-measurement-labels-live.ts","variant": "html-window-review","status": "failed","failureCategory": "stale-window-html-pixels","id": "f161"}
       ]
     },
     "26.2.1": {
       "passedFixtures": 156,
-      "failedFixtures": 10,
+      "failedFixtures": 11,
       "toolCounts": {"accepted-fixture": 303,"not-observed": 68},
       "fixtures": [
         {"script": "scripts/verify-arbitrary-section-live.ts","status": "passed","id": "f01"},
@@ -346,7 +347,8 @@
         {"script": "scripts/verify-native-section-analysis-live.ts","variant": "native-viewport","status": "passed","id": "f163"},
         {"script": "scripts/verify-native-joints-vents-live.ts","variant": "cable-channel-geometry","status": "passed","id": "f164"},
         {"script": "scripts/verify-native-measure-datum-files-live.ts","variant": "step-provenance-geometry","status": "passed","id": "f165"},
-        {"script": "scripts/verify-native-measurement-labels-live.ts","variant": "html-layout","status": "passed","id": "f166"}
+        {"script": "scripts/verify-native-measurement-labels-live.ts","variant": "html-layout","status": "passed","id": "f166"},
+        {"script": "scripts/verify-native-measurement-labels-live.ts","variant": "html-window-review","status": "failed","failureCategory": "stale-window-html-pixels","id": "f167"}
       ]
     }
   },
@@ -658,14 +660,14 @@
     {"name": "plasticity_reverse_curves","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f84"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f92"],"negativeFixtures": []}},
     {"name": "plasticity_reverse_sheets","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f90"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f98"],"negativeFixtures": []}},
     {"name": "plasticity_revolve_profile","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f91"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f99"],"negativeFixtures": []}},
-    {"name": "plasticity_rotate","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f149","f155"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f69","f156","f161"],"negativeFixtures": []}},
+    {"name": "plasticity_rotate","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f149","f155","f160"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f69","f156","f161","f166"],"negativeFixtures": []}},
     {"name": "plasticity_rotate_curve_control_points","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f07"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f10"],"negativeFixtures": []}},
     {"name": "plasticity_rotate_faces","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f26"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f29"],"negativeFixtures": []}},
     {"name": "plasticity_rotate_instances","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f30"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f33"],"negativeFixtures": []}},
     {"name": "plasticity_rotate_reference_meshes","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f38"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f41"],"negativeFixtures": []}},
     {"name": "plasticity_save_copy","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f121"],"negativeFixtures": ["f121"]},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f129"],"negativeFixtures": ["f129"]}},
     {"name": "plasticity_save_named_selection","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f112"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f120"],"negativeFixtures": []}},
-    {"name": "plasticity_scale","26.1.3": {"status": "not-observed","acceptedFixtures": [],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f04","f70","f73"],"negativeFixtures": []}},
+    {"name": "plasticity_scale","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f160"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f04","f70","f73","f166"],"negativeFixtures": []}},
     {"name": "plasticity_scale_curve_control_points","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f07"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f10"],"negativeFixtures": []}},
     {"name": "plasticity_scale_faces","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f26"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f29"],"negativeFixtures": []}},
     {"name": "plasticity_scale_instances","26.1.3": {"status": "accepted-fixture","acceptedFixtures": ["f30"],"negativeFixtures": []},"26.2.1": {"status": "accepted-fixture","acceptedFixtures": ["f33"],"negativeFixtures": []}},

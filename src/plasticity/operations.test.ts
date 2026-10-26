@@ -6796,3 +6796,33 @@ test("explicit viewport screenshot requires freshness and matching canvas dimens
     await assert.rejects(readFile(join(root,"mismatch.png")), { code: "ENOENT" });
   } finally { await rm(root,{recursive:true,force:true}); }
 });
+
+test("item transform preserves missing native measurement names by stable ID inside commit", async () => {
+  const state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "fixture", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  let source = "";
+  const runtime = { async getState() { return state; }, async mutate(code: string) { source = code; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  await operations.move([7], [5, 0, 0], state.revision);
+  const body = source.slice(source.indexOf("      const measurementNames ="), source.indexOf("      return result;") + "      return result;".length);
+  const execute = Function("editor", "factory", `return (async () => {${body}})()`);
+  const original = [
+    { versionId: 1, userData: { name: "Width" } },
+    { versionId: 2, userData: { name: "Deleted" } },
+    { versionId: 3, userData: { name: "" } },
+    { versionId: 4, userData: { name: "Old" } },
+  ];
+  const replaced: any[] = [{ versionId: 11 }, { versionId: 13, userData: { extra: true } }, { versionId: 14, userData: { name: "Native replacement" } }, { versionId: 22 }];
+  let current: any[] = original;
+  const ids = new Map([[1, 1], [11, 1], [2, 2], [3, 3], [13, 3], [4, 4], [14, 4], [22, 22]]);
+  const editor = { measurements: { snapshot: () => ({ repo: { measurements: current } }), lookupStableId: (id: number) => ids.get(id) } };
+  const result = await execute(editor, { async commit() { current = replaced; return "native-result"; } });
+  assert.equal(result, "native-result");
+  assert.equal(replaced[0].userData.name, "Width");
+  assert.deepEqual(replaced[1].userData, { extra: true, name: "" });
+  assert.equal(replaced[2].userData.name, "Native replacement");
+  assert.equal(replaced[3].userData, undefined, "deleted stable ID must not name another measurement");
+  assert.deepEqual(original[0], { versionId: 1, userData: { name: "Width" } });
+  current = original;
+  await assert.rejects(execute(editor, { async commit() { throw Error("native failure"); } }), /native failure/);
+  assert.equal(current, original);
+});

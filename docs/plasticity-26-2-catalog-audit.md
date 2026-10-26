@@ -920,3 +920,26 @@ settings were unchanged.
 
 Validation: 1480 root tests and typecheck pass, including executed callback and
 capture-order regressions plus live-runner guards.
+
+
+## Measurement names and external window review
+
+The measurement label fixture now passes thirteen phases on each experimental
+version, requiring exact names through item rotation/scale Undo, move Undo/Redo
+and measurement delete Undo/Redo. Item transform commands preserve missing names
+on surviving stable IDs inside the command, before history captures the result.
+No cache/prototype patch is installed; other command families and file
+serialization remain outside this name qualification.
+
+External CUA window images were collected at three paused checkpoints. Manual
+review fails overall on both versions: modern capture retains 10.00 mm after a
+native/DOM update to 15 mm and retains labels after deletion; legacy creation
+capture is stale/empty, although its 15.00 mm update and deletion images are
+correct. Captures remain separate from passing native/DOM evidence. The runner
+records artifact hashes without calling image presence a glyph pass. Manual
+review retains the native/layout exit code separately and fails window acceptance.
+See [the full contract and review table](html-measurement-labels.md).
+
+1482 root tests and typecheck pass. Accepted tool counts are 303/371 on 26.2.1
+and 267/371 on 26.1.3; the scale call adds legacy acceptance for that fixture. Failed external window review adds one failed fixture on
+each version; existing failures remain. Both CAD scenes finish empty and idle.

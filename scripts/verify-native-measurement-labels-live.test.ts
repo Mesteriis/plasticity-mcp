@@ -12,3 +12,8 @@ test("HTML measurement acceptance is inert by default and requires all live guar
   assert.throws(() => parseMeasurementLabelsArgs(args.slice(0, 3)), /--output/);
   assert.throws(() => parseMeasurementLabelsArgs([...args, "--geometry-only"]), /cannot use/);
 });
+
+test("external window review retains explicit disposable mutation guards", () => {
+  assert.throws(() => parseMeasurementLabelsArgs(["--window-review"]), /--target/);
+  assert.equal(parseMeasurementLabelsArgs(["--target", "disposable", "--allow-disposable-mutations", "--output", "/tmp/review", "--window-review"]).windowReview, true);
+});
