@@ -89,6 +89,7 @@
     "accept:step-reference-download": "node scripts/verify-step-reference-download-live.ts",
     "accept:design-reference-to-native": "node scripts/verify-design-reference-to-native-live.ts",
     "accept:parasolid-reference": "node scripts/verify-parasolid-reference-live.ts",
+    "accept:strength-catalog": "node scripts/verify-strength-catalog-live.ts",
     "accept:fracture-energy": "node scripts/verify-fracture-energy-live.ts",
     "accept:joint-tests": "node scripts/verify-joint-tests-live.ts",
     "accept:material-coupon": "node scripts/verify-material-coupon-live.ts",

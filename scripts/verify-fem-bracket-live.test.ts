@@ -26,3 +26,13 @@ test("bracket FEA live acceptance rejects unknown and incomplete arguments", () 
   assert.throws(() => parseBracketAcceptanceArgs(["--target"]), /requires/i);
   assert.throws(() => parseBracketAcceptanceArgs(["--unknown"]), /unknown/i);
 });
+
+test("bracket sparse layer fixture follows the current large-stack contract", async () => {
+  const { bracketLayerPlan } = await import("./verify-fem-bracket-live.ts");
+  const { createCohesiveLayerPlanePlan } = await import("../src/strength/fem/layer-plane-plan.ts");
+  const { cohesiveLayerPlanePlanInputSchema } = await import("../src/strength/fem/layer-plane-plan.ts");
+  const plan = createCohesiveLayerPlanePlan(cohesiveLayerPlanePlanInputSchema.parse(bracketLayerPlan([0, 0, 1])));
+  assert.equal(plan.planes.length, 2);
+  assert.notEqual(plan.coverage, "all-layer-interfaces");
+  assert.deepEqual(plan.planes.map(p => p.pointMm), [[0, 0, 5], [0, 0, 10]]);
+});

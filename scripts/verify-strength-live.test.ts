@@ -113,3 +113,16 @@ test("live Euler fixture is a traceable synthetic case with exact elastic column
   assert.ok(Math.abs(result.buckling!.criticalLoadN - 822.4670334241132) < 1e-9);
   assert.ok(Math.abs(result.buckling!.criticalStressMPa - 4.112335167120566) < 1e-10);
 });
+
+test("unscaled analysis accepts a sourced absence of dimensions without accepting fabricated measurements", async () => {
+  const { preservesUnscaledReference } = await import("./verify-strength-live.ts");
+  const valid = { observations: [{ label: "The described concept is unscaled; exact dimensions are not supplied.", status: "sourced" }], proposedMethod: null, questions: [{ question: "What will it support and how is it mounted?" }] };
+  assert.equal(preservesUnscaledReference(valid), true);
+  assert.equal(preservesUnscaledReference({ ...valid, observations: [{ label: "No image or dimensions supplied.", status: "sourced" }] }), true);
+  assert.equal(preservesUnscaledReference({ ...valid, observations: [] }), false);
+  assert.equal(preservesUnscaledReference({ ...valid, designInterpretation: { scaleStatus: "calibrated" } }), false);
+  assert.equal(preservesUnscaledReference({ ...valid, observations: [{ label: "Dimensions", status: "unknown" }] }), true);
+  assert.equal(preservesUnscaledReference({ ...valid, proposedMethod: "cantilever-tip-rectangle-v1" }), false);
+  assert.equal(preservesUnscaledReference({ ...valid, observations: [...valid.observations, { label: "Width", status: "assumed", unit: "mm", value: 10 }] }), false);
+  assert.equal(preservesUnscaledReference({ ...valid, observations: [...valid.observations, { label: "Width is 10 mm", status: "sourced" }] }), false);
+});

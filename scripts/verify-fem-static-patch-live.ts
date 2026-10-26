@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -9,6 +9,11 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { runLinearStaticCase } from "../src/strength/fem/calculix-linear-static.ts";
 import { generateCalculiXMeshFromStep } from "../src/strength/fem/step-face-mapping.ts";
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
+
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
+import { hydrateNativeState } from "./native-live-state.ts";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const syntheticMaterialEvidence = {
@@ -66,7 +71,7 @@ async function main(): Promise<void> {
     schemaVersion: 1,
     startedAt: new Date().toISOString(),
     targetId: options.target,
-    plasticityVersion: "26.1.3",
+    targetSelection: "explicit",
     testCase: {
       geometryMm: [10, 5, 4],
       material: {
@@ -84,11 +89,7 @@ async function main(): Promise<void> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: {
-      ...selectedEnvironment(process.env),
-      PLASTICITY_STRENGTH_ROOT: store,
-      PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223",
-    },
+    env: isolatedAcceptanceEnvironment(store, process.env),
     stderr: "pipe",
   });
   const client = new Client({ name: "plasticity-fem-static-patch-acceptance", version: "1.0.0" });
@@ -96,6 +97,7 @@ async function main(): Promise<void> {
   let disposableBodyId: number | undefined;
   const disposableBodyIds = new Set<number>();
   let disposableUndoCount = 0;
+  let ownedRevision: string | undefined;
   let partialSupportReportId: string | undefined;
   let partialSupportEvidence: Record<string, unknown> | undefined;
   try {
@@ -103,7 +105,7 @@ async function main(): Promise<void> {
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     initial = await call(client, "plasticity_connect", { targetId: options.target });
-    requireCondition(initial.bodies.length === 0, "Refusing the live solver test in a nonempty document");
+    requireCondition(isDisposableEmptyDocument(initial), "Refusing the live solver test in a nonempty document");
     const snapshot = await call(client, "plasticity_capture_snapshot", { label: "fem-static-patch-before" });
 
     const created = await call(client, "plasticity_create_box", {
@@ -115,6 +117,7 @@ async function main(): Promise<void> {
     });
     requireCondition(created.bodies.length === 1, "Native probe did not produce exactly one Solid");
     const body = created.bodies[0];
+    ownedRevision = created.revision;
     disposableBodyId = body.id;
     disposableBodyIds.add(body.id);
     disposableUndoCount += 1;
@@ -134,7 +137,7 @@ async function main(): Promise<void> {
     const supportFace = faces.find((face: any) => face.normal[0] < -0.99999);
     const loadedFace = faces.find((face: any) => face.normal[0] > 0.99999);
     requireCondition(supportFace && loadedFace, "Could not identify opposing native planar end faces");
-    const mcpReport = await call(client, "plasticity_analyze_static_fem", {
+    const mcpRequest = {
       bodyId: body.id,
       revision: afterExport.revision,
       supportConditions: [{ faceId: supportFace.faceId, fixedTranslationAxes: ["x", "y", "z"] }],
@@ -189,7 +192,26 @@ async function main(): Promise<void> {
       ...syntheticMaterialEvidence,
       youngsModulusMPa: 2000,
       poissonRatio: 0.3,
+    };
+    const mcpReport = await call(client, "plasticity_analyze_static_fem", mcpRequest);
+    const overlappingReport = await call(client, "plasticity_analyze_static_fem", {
+      ...mcpRequest, meshSizeMm: 1, meshRefinementSteps: 1,
     });
+    const refinementComparison = await call(client, "plasticity_compare_static_fem_refinement_reports", {
+      reportIds: [mcpReport.id, overlappingReport.id],
+    });
+    requireCondition(refinementComparison.freshness.status === "current"
+      && refinementComparison.cases.length === mcpReport.cases.length,
+    "Refinement comparison did not retain the current native binding and both load cases");
+    for (const [index, loadCase] of refinementComparison.cases.entries()) {
+      requireCondition(loadCase.name === mcpReport.cases[index].name
+        && loadCase.refinementDiagnostics.interpretation === "sampled-trend-only"
+        && loadCase.meshLevels.length === 4
+        && loadCase.meshLevels.every((level: any, levelIndex: number) =>
+          level.meshSha256 === mcpReport.cases[index].meshLevels[levelIndex].meshSha256
+          && level.maximumVonMisesMPa === mcpReport.cases[index].meshLevels[levelIndex].calculation.maximumVonMisesMPa),
+      "Refinement comparison changed or duplicated overlapping solver evidence");
+    }
     requireCondition(mcpReport.kind === "static-fem-linear-elastic" && mcpReport.mesh.elementFamily === "C3D4", "Public MCP did not return a CalculiX Solid analysis");
     requireCondition(mcpReport.input.youngsModulusEvidence?.status === "assumed"
       && mcpReport.input.poissonRatioEvidence.status === "assumed",
@@ -379,6 +401,7 @@ async function main(): Promise<void> {
     });
     requireCondition(hollowed.bodies.length === 1, "Hollow fixture did not preserve exactly one native Solid");
     const hollowBody = hollowed.bodies[0];
+    ownedRevision = hollowed.revision;
     disposableBodyId = hollowBody.id;
     disposableBodyIds.add(hollowBody.id);
     disposableUndoCount += 1;
@@ -546,18 +569,27 @@ async function main(): Promise<void> {
 
     const journal = await call(client, "plasticity_construction_journal", {});
     requireCondition(journal.syncStatus === "in-sync" && !journal.entries.some((entry: { status: string }) => entry.status === "unknown"), "Construction journal is not clean before cleanup");
+    const beforeCleanup = await call(client, "plasticity_status", {});
+    requireCondition(beforeCleanup.documentToken === initial.documentToken && beforeCleanup.revision === ownedRevision, "Native ownership changed before FEM cleanup");
     let cleaned = await call(client, "plasticity_undo", {
       intent: "Cleanup disposable hollow FEA fixture",
-      revision: (await call(client, "plasticity_status", {})).revision,
+      revision: beforeCleanup.revision,
     });
+    ownedRevision = cleaned.revision;
     disposableUndoCount -= 1;
     requireCondition(cleaned.bodies.length === 1 && disposableBodyIds.has(cleaned.bodies[0].id), "Undo did not restore the original disposable FEA box");
     cleaned = await call(client, "plasticity_undo", { intent: "Cleanup disposable FEA static patch probe", revision: cleaned.revision });
+    ownedRevision = cleaned.revision;
     disposableUndoCount -= 1;
     requireCondition(cleaned.documentToken === initial.documentToken && cleaned.bodies.length === 0, "Undo did not restore the empty document");
     disposableBodyId = undefined;
     const staleMcpReport = await call(client, "plasticity_static_fem_report", { reportId: mcpReport.id });
     requireCondition(staleMcpReport.freshness.status === "stale", "MCP FEA report did not become stale after its Solid was removed");
+    const staleComparison = await call(client, "plasticity_compare_static_fem_refinement_reports", {
+      reportIds: [mcpReport.id, overlappingReport.id],
+    });
+    requireCondition(staleComparison.freshness.status === "stale", "Refinement comparison lost its stale native binding after cleanup");
+    evidence.refinementComparison = { ...refinementComparison, freshnessAfterCleanup: staleComparison.freshness };
     const stalePartialReport = await call(client, "plasticity_static_fem_report", { reportId: partialSupportReportId });
     requireCondition(stalePartialReport.freshness.status === "stale", "Selective-restraint MCP FEA report did not become stale after cleanup");
     if (partialSupportEvidence) partialSupportEvidence.freshnessAfterCleanup = stalePartialReport.freshness;
@@ -588,10 +620,10 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000);
-    if (initial && disposableBodyId !== undefined) {
+    if (initial && disposableBodyId !== undefined && permitsNativeFailureRecovery(error)) {
       try {
         const current = await call(client, "plasticity_status", {});
-        if (current.bodies.length === 1 && disposableBodyIds.has(current.bodies[0].id)) {
+        if (current.documentToken === initial.documentToken && current.revision === ownedRevision && current.bodies.length === 1 && disposableBodyIds.has(current.bodies[0].id)) {
           let cleanupState = current;
           let cleanedCount = 0;
           while (disposableUndoCount > 0 && cleanupState.bodies.length === 1 && disposableBodyIds.has(cleanupState.bodies[0].id)) {
@@ -628,18 +660,15 @@ function findNode(meshText: string, point: number[]): number {
 }
 
 async function call(client: Client, name: string, args: Record<string, unknown>): Promise<any> {
-  const response = await client.callTool({ name, arguments: args }) as {
+  const response = await client.callTool({ name, arguments: args }, undefined, { timeout: name === "plasticity_analyze_static_fem" ? 600_000 : 60_000 }) as {
     isError?: boolean;
     content: Array<{ type: string; text?: string }>;
   };
   const item = response.content.find((entry) => entry.type === "text");
   if (response.isError || !item || item.type !== "text" || typeof item.text !== "string") throw new Error(`${name} failed: ${JSON.stringify(response.content)}`);
-  return JSON.parse(item.text);
+  return await hydrateNativeState(JSON.parse(item.text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
-function selectedEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(environment).filter(([key, value]) => value !== undefined && /^(PATH|HOME|TMPDIR|TMP|TEMP|LANG|LC_[A-Z_]+|CODEX_HOME|CODEX_CLI_PATH|OPENAI_API_KEY|PLASTICITY_[A-Z0-9_]+|PLASTICITY_MCP_[A-Z0-9_]+)$/.test(key)));
-}
 
 function near(actual: number, expected: number, tolerance: number, label: string): void {
   requireCondition(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, `${label}: expected ${expected} ± ${tolerance}, got ${actual}`);
@@ -674,4 +703,4 @@ function requirePrincipalStressEvidence(calculation: any, boundsMm: { min: numbe
   }
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await main();

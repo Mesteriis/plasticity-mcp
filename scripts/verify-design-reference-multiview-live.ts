@@ -5,11 +5,14 @@ import { mkdir, open, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { hasSceneContentChanges } from "./verify-section-strength-live.ts";
+
 import { call, stageImage, startMcp, type LiveMcp } from "./verify-strength-live.ts";
 
 interface Options {
   help: boolean;
   liveCodex: boolean;
+  target?: string;
   output?: string;
   images: string[];
 }
@@ -18,8 +21,9 @@ const HELP = `Usage:
   node scripts/verify-design-reference-multiview-live.ts --help
   node scripts/verify-design-reference-multiview-live.ts --live-codex --output NEW_DIRECTORY --image /absolute/photo.jpg [--image ...]
 
+Optional --target ID connects one explicit experimental copy and verifies no scene/history change.
 Requires 1–4 absolute PNG/JPEG/HEIC/HEIF paths and a new output directory. This check
-uses stdio MCP and the isolated Codex API only; it does not connect to or edit CAD.`;
+uses stdio MCP and the isolated Codex API. With --target it connects read-only to CAD; it never edits CAD.`;
 
 function parseArgs(argv: string[]): Options {
   const options: Options = { help: argv.length === 0, liveCodex: false, images: [] };
@@ -27,7 +31,10 @@ function parseArgs(argv: string[]): Options {
     const argument = argv[index];
     if (argument === "--help") options.help = true;
     else if (argument === "--live-codex") options.liveCodex = true;
-    else if (argument === "--output") {
+    else if (argument === "--target") {
+      const value = argv[++index]; if (!value || value.startsWith("--")) throw new Error("--target requires an explicit window ID");
+      options.target = value;
+    } else if (argument === "--output") {
       const value = argv[++index];
       if (!value) throw new Error("--output requires a new directory path");
       options.output = value;
@@ -63,6 +70,7 @@ async function main(): Promise<void> {
     result: null,
   };
   let live: LiveMcp | undefined;
+  let initial: any; let snapshot: any;
   try {
     const staged = [];
     for (const [index, path] of options.images.entries()) {
@@ -78,6 +86,13 @@ async function main(): Promise<void> {
     assert.equal(new Set(stagedViews.map(({ sha256 }) => sha256)).size, stagedViews.length, "Live multi-view acceptance requires distinct image inputs");
     evidence.inputViews = stagedViews;
     live = await startMcp(join(output, "strength-store"), output);
+    if (options.target) {
+      const windows = await call(live.client, "plasticity_list_windows", {});
+      assert(windows.some((w: any) => w.targetId === options.target), "Explicit experimental target missing");
+      initial = await call(live.client, "plasticity_connect", { targetId: options.target });
+      snapshot = await call(live.client, "plasticity_capture_snapshot", { label: "design-reference-readonly-baseline" });
+      evidence.cadConnected = true;
+    }
     const methods = await call(live.client, "plasticity_strength_methods", {});
     assert.equal(methods.analysis?.available, true, `Codex analysis unavailable: ${String(methods.analysis?.reason ?? "unknown")}`);
 
@@ -127,6 +142,22 @@ async function main(): Promise<void> {
       questionCount: result.result.questions.length,
       measuredMillimeterObservationCount: 0,
     };
+    const stored = await call(live.client, "plasticity_design_reference_request", { requestId });
+    assert.equal(stored.state, "completed"); assert.deepEqual(stored.result, result.result);
+    if (initial) {
+      const after = await call(live.client, "plasticity_status", {});
+      for (const key of ["documentToken", "revision", "undoDepth", "redoDepth"]) assert.equal(after[key], initial[key]);
+      assert(!hasSceneContentChanges((await call(live.client, "plasticity_changes_since", { snapshotId: snapshot.snapshotId })).diff));
+      assert.equal((await call(live.client, "plasticity_construction_history", { offset: 0, limit: 100 })).total, 0);
+      evidence.nativeSceneAndHistoryUnchanged = true;
+    }
+    await live.client.close(); live = await startMcp(join(output, "strength-store"), output);
+    assert.deepEqual(await call(live.client, "plasticity_design_reference_request", { requestId }), stored);
+    if (initial) {
+      const after = await call(live.client, "plasticity_connect", { targetId: options.target });
+      for (const key of ["documentToken", "revision", "undoDepth", "redoDepth", "bodies", "regions", "groups", "instances", "referenceMeshes", "measurements", "sectionAnalyses"]) assert.deepEqual(after[key], initial[key]);
+    }
+    evidence.requestPreservedAfterRestart = true;
     evidence.completedAt = new Date().toISOString();
     await writeExclusive(join(output, "evidence.json"), evidence);
     console.log(JSON.stringify(evidence, null, 2));

@@ -8,6 +8,18 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
 
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
+import { hydrateNativeState } from "./native-live-state.ts";
+
+import { orthotropicTsaiWuTestMetadata, orthotropicTsaiWuInteractionTestAxis } from "../src/strength/material-qualification.ts";
+
+export function bracketLayerPlan(normal: number[]) {
+  return { processProfileHash: "a".repeat(64), firstInterfacePointMm: normal.map(c => c * 5), buildDirectionGlobal: normal,
+    layerHeightMm: 0.05, totalLayerCount: 300, interfaceLayerIndices: [100, 200], interfaceOffsetsMm: [0, 5] };
+}
+
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 interface Options { help: boolean; target?: string; allowMutations: boolean; output?: string }
 
@@ -67,15 +79,11 @@ async function main(): Promise<void> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: {
-      ...selectedEnvironment(process.env),
-      PLASTICITY_STRENGTH_ROOT: join(output, "strength-store"),
-      PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223",
-    },
+    env: isolatedAcceptanceEnvironment(join(output, "strength-store"), process.env),
     stderr: "pipe",
   });
   const client = new Client({ name: "plasticity-fem-bracket-acceptance", version: "1.0.0" });
-  const evidence: Record<string, unknown> = { schemaVersion: 1, startedAt: new Date().toISOString(), plasticityVersion: "26.1.3", workbenchUsed: false };
+  const evidence: Record<string, unknown> = { schemaVersion: 1, startedAt: new Date().toISOString(), targetSelection: "explicit", workbenchUsed: false };
   let initial: any;
   let knownRevision: string | undefined;
   let confirmedUndoSteps = 0;
@@ -85,7 +93,7 @@ async function main(): Promise<void> {
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity window was not found");
     initial = await call(client, "plasticity_connect", { targetId: options.target });
-    requireCondition(initial.bodies.length === 0 && initial.regions.length === 0, "Refusing live FEA acceptance in a nonempty document");
+    requireCondition(isDisposableEmptyDocument(initial), "Refusing live FEA acceptance in a nonempty document");
     knownRevision = initial.revision;
     ownsDocument = true;
     const snapshot = await call(client, "plasticity_capture_snapshot", { label: "representative-bracket-fea-before" });
@@ -258,7 +266,7 @@ async function main(): Promise<void> {
     knownRevision = tiltedState.revision;
     const tiltedBracket = tiltedState.bodies.find((body: any) => body.id === bracket.id && body.type === "Solid");
     requireCondition(tiltedBracket, "Rotated acceptance bracket disappeared before the oblique cohesive analysis");
-    const tiltedProcess = { ...couponFixture.process, orientationDeg: [0, 45, 0] };
+    const tiltedProcess = { ...couponFixture.process, orientationDeg: [0, 45, 0], layerHeightMm: 0.05 };
     const tiltedMaterialId = (tiltedProcess as Record<string, unknown>).materialId;
     const tiltedCoupon = await recordSyntheticOrthotropicCoupon(client, tiltedProcess, layerNormal);
     const layerTestRecord = await recordSyntheticSameMaterialLayerTest(client, tiltedProcess, layerNormal);
@@ -312,46 +320,32 @@ async function main(): Promise<void> {
       support: { id: cohesiveSupport.id, centerMm: cohesiveSupport.centerMm, normal: cohesiveSupport.normal, boundsMm: cohesiveSupport.boundsMm },
       loaded: { id: cohesiveLoad.id, centerMm: cohesiveLoad.centerMm, normal: cohesiveLoad.normal, boundsMm: cohesiveLoad.boundsMm },
     };
+    const selectedPlan = await call(client, "plasticity_plan_cohesive_layer_planes", bracketLayerPlan(layerNormal));
+    requireCondition(selectedPlan.planes.length === 2 && selectedPlan.coverage !== "all-layer-interfaces", "Sparse bracket plan must preserve two selected interfaces and incomplete coverage");
     const cohesiveReport = await call(client, "plasticity_analyze_cohesive_interface", {
       bodyId: bracket.id,
       revision: knownRevision,
       interfaceTestRecordId: layerTestRecord.recordId,
-      splitPlanes: [5, 10].map((offset) => ({
-        pointMm: layerNormal.map((component) => component * offset),
-        normalGlobal: layerNormal,
-      })),
-      layerPlanePlan: {
-        processProfileHash: "a".repeat(64),
-        firstInterfacePointMm: layerNormal.map((component) => component * 5),
-        buildDirectionGlobal: layerNormal,
-        layerHeightMm: 0.2,
-        totalLayerCount: 40,
-        interfaceLayerIndices: [1, 26],
-        interfaceOffsetsMm: [0, 5],
-      },
-      negativeSideMaterial: "A",
+      splitPlanes: selectedPlan.planes,
+      layerPlanePlan: selectedPlan.plan,
       supportFaceId: cohesiveSupport.id,
       loadedFaceId: cohesiveLoad.id,
       meshSizeMm: 6,
-      poissonRatioA: 0.3,
-      poissonRatioEvidenceA: sourcedFixtureEvidence("cohesive-nu-a", 0.3, "ratio"),
-      poissonRatioB: 0.3,
-      poissonRatioEvidenceB: sourcedFixtureEvidence("cohesive-nu-b", 0.3, "ratio"),
+      poissonRatio: 0.3,
+      poissonRatioEvidence: tiltedCoupon.nu12Evidence,
       useOrthotropicBulkProperties: true,
       modeIIRecordId: modeIIRecord.recordId,
       mixedModeRecordIds: mixedModeRecords.map((record) => record.recordId),
       initialStiffnessMPaPerMm: 100_000,
-      initialStiffnessEvidence: sourcedFixtureEvidence("cohesive-stiffness", 100_000, "MPa/mm"),
+      initialStiffnessEvidence: { ...sourcedFixtureEvidence("cohesive-stiffness", 100_000, "MPa/mm"), materialProcess: tiltedProcess },
       prescribedDisplacementGlobalMm: layerNormal.map((component, axis) => 0.03 * component + 0.03 * layerTangent[axis]!),
       adherencePenalty: 0.00001,
       increments: 100,
     }, 600_000);
     requireCondition(cohesiveReport.physicalTest.interfaceKind === "same-material-layer"
       && cohesiveReport.solver.solver === "Code_Aster 17.4.0"
-      && cohesiveReport.solver.resultInterpretation === "raw-mixed-mode-cohesive-solver-response"
-      && cohesiveReport.turonCalibration?.calibration.materialPair.interfaceKind === "same-material-layer"
-      && cohesiveReport.turonCalibration.calibration.materialPair.materialAProcess.materialId === tiltedMaterialId
-      && cohesiveReport.turonCalibration.calibration.materialPair.materialBProcess.materialId === tiltedMaterialId
+      && cohesiveReport.solver.interpretation === "raw-mixed-mode-cohesive-solver-response"
+      && cohesiveReport.turonCalibration?.calibration.materialProcess.materialId === tiltedMaterialId
       && cohesiveReport.turonCalibration.calibration.samples.length === 2
       && cohesiveReport.mesh.volumeCount === 3
       && cohesiveReport.mesh.interfaceSurfaceCount === 2,
@@ -369,7 +363,7 @@ async function main(): Promise<void> {
       process: tiltedProcess,
       materialAssignment: cohesiveReport.materialAssignment,
       solver: cohesiveReport.solver.solver,
-      solverInterpretation: cohesiveReport.solver.resultInterpretation,
+      solverInterpretation: cohesiveReport.solver.interpretation,
       turonCalibration: cohesiveReport.turonCalibration.calibration,
       mesh: {
         volumeCount: cohesiveReport.mesh.volumeCount,
@@ -447,7 +441,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000);
-    if (initial && ownsDocument && confirmedUndoSteps > 0 && knownRevision) {
+    if (initial && ownsDocument && confirmedUndoSteps > 0 && knownRevision && permitsNativeFailureRecovery(error)) {
       evidence.cleanup = await undoOwnedSteps(client, initial, knownRevision, confirmedUndoSteps)
         .then((state) => ({ restoredEmptyDocument: state.documentToken === initial.documentToken && state.bodies.length === 0 && state.regions.length === 0, undoSteps: confirmedUndoSteps }))
         .catch((cleanupError) => ({ restoredEmptyDocument: false, reason: cleanupError instanceof Error ? cleanupError.message.slice(0, 1_000) : String(cleanupError) }));
@@ -470,7 +464,7 @@ async function recordSyntheticOrthotropicTsaiWuCoupon(client: Client): Promise<{
     materialId: "synthetic-acceptance-single-material",
     profileHash: "a".repeat(64),
     orientationDeg: [0, 0, 0],
-    infillPercent: 100,
+    infillPercent: 100, infillPattern: "grid", wallLoops: 2, topShellLayers: 5, bottomShellLayers: 3,
     nozzleTemperatureC: 220,
     layerHeightMm: 0.2,
   };
@@ -493,9 +487,9 @@ async function recordSyntheticOrthotropicTsaiWuCoupon(client: Client): Promise<{
     ...Object.entries({ youngModulusMPa: 2_100, shearModulusMPa: 740, tensileStrengthMPa: 31, shearStrengthMPa: 17 })
       .map(([key, value], index) => ({ id: `base-${key}`, label: `Synthetic acceptance ${key}`, status: "measured", unit: "MPa", value, sourceUrl: source, sourceHash: fixtureHash(index), sourceLocator: `synthetic-only/${key}`, dependsOn: [] })),
     ...Object.entries(constants).map(([key, value], index) => ({ id: `ortho-${key}`, label: `Synthetic acceptance ${key}`, status: "measured", unit: key.startsWith("poisson") ? "ratio" : "MPa", value, sourceUrl: source, sourceHash: fixtureHash(index + 4), sourceLocator: `synthetic-only/${key}`, dependsOn: [] })),
-    ...Object.entries(strengths).map(([key, value], index) => ({ id: `strength-${key}`, label: `Synthetic acceptance ${key}`, status: "measured", unit: "MPa", value, sourceUrl: source, sourceHash: fixtureHash(index + 11), sourceLocator: `synthetic-only/${key}`, dependsOn: [] })),
-    ...Object.keys(interactions).map((key, index) => ({ id: `biaxial-${key}`, label: `Synthetic acceptance biaxial ${key}`, status: "measured", sourceUrl: source, sourceHash: fixtureHash(index + 20), sourceLocator: `synthetic-only/biaxial-${key}`, dependsOn: [] })),
-    ...Object.entries(interactions).map(([key, value], index) => ({ id: `interaction-${key}`, label: `Synthetic acceptance interaction ${key}`, status: "derived", unit: "ratio", value, sourceUrl: source, sourceHash: fixtureHash(index + 23), sourceLocator: `synthetic-only/fit-${key}`, derivation: "Synthetic test-fixture fit only.", dependsOn: [`biaxial-${key}`] })),
+    ...Object.entries(strengths).map(([key, value], index) => ({ ...orthotropicTsaiWuTestMetadata[key as keyof typeof orthotropicTsaiWuTestMetadata], id: `strength-${key}`, label: `Synthetic acceptance ${key}`, status: "measured", unit: "MPa", value, sourceUrl: source, sourceHash: fixtureHash(index + 11), sourceLocator: `synthetic-only/${key}`, dependsOn: [] })),
+    ...Object.keys(interactions).map((key, index) => ({ testAxis: orthotropicTsaiWuInteractionTestAxis[key as keyof typeof orthotropicTsaiWuInteractionTestAxis], testMode: "biaxial", id: `biaxial-${key}`, label: `Synthetic acceptance biaxial ${key}`, status: "measured", sourceUrl: source, sourceHash: fixtureHash(index + 20), sourceLocator: `synthetic-only/biaxial-${key}`, dependsOn: [] })),
+    ...Object.entries(interactions).map(([key, value], index) => ({ testAxis: orthotropicTsaiWuInteractionTestAxis[key as keyof typeof orthotropicTsaiWuInteractionTestAxis], testMode: "biaxial", id: `interaction-${key}`, label: `Synthetic acceptance interaction ${key}`, status: "derived", unit: "ratio", value, sourceUrl: source, sourceHash: fixtureHash(index + 23), sourceLocator: `synthetic-only/fit-${key}`, derivation: "Synthetic test-fixture fit only.", dependsOn: [`biaxial-${key}`] })),
   ];
   const basePropertyEvidence = { youngModulusMPa: ["base-youngModulusMPa"], shearModulusMPa: ["base-shearModulusMPa"], tensileStrengthMPa: ["base-tensileStrengthMPa"], shearStrengthMPa: ["base-shearStrengthMPa"] };
   const qualification = await call(client, "plasticity_record_material_coupon_data", {
@@ -561,10 +555,8 @@ async function recordSyntheticSameMaterialLayerTest(
 ): Promise<{ recordId: string }> {
   const peakStrengthMPa = 2.4;
   const record = await call(client, "plasticity_record_material_interface_test", {
-    interfaceKind: "same-material-layer",
-    materialAProcess: process,
-    materialBProcess: process,
-    testMode: "normal-tension",
+    materialProcess: process,
+    testMode: "normal-tension", fractureMethod: "dcb-mode-i",
     interfaceNormalGlobal,
     loadDirectionGlobal: interfaceNormalGlobal,
     testMethod: "Synthetic DCB cohesive integration fixture",
@@ -621,10 +613,8 @@ async function recordSyntheticLayerInterfaceCurve(
 ): Promise<{ recordId: string }> {
   const measuredPeakStrengthMPa = Math.hypot(input.peakNormalTractionMPa, input.peakTangentialTractionMPa);
   const record = await call(client, "plasticity_record_material_interface_test", {
-    interfaceKind: "same-material-layer",
-    materialAProcess: input.process,
-    materialBProcess: input.process,
-    testMode: input.testMode,
+    materialProcess: input.process,
+    testMode: input.testMode, fractureMethod: input.testMode === "interface-shear" ? "enf-mode-ii" : "mmb-mixed-mode",
     interfaceNormalGlobal: input.interfaceNormalGlobal,
     loadDirectionGlobal: input.loadDirectionGlobal,
     testMethod: input.testMethod,
@@ -689,14 +679,15 @@ async function recordSyntheticOrthotropicCoupon(
   client: Client,
   process: Record<string, unknown>,
   buildDirectionGlobal: [number, number, number],
-): Promise<{ recordId: string }> {
+): Promise<{ recordId: string; nu12Evidence: Record<string, unknown> }> {
   const properties = { youngModulusMPa: 2_100, shearModulusMPa: 740, tensileStrengthMPa: 31, shearStrengthMPa: 17 };
   const orthotropic = {
     youngsModulus2MPa: 1_800, youngsModulus3MPa: 900, poissonRatio13: 0.22,
     poissonRatio23: 0.26, shearModulus12MPa: 700, shearModulus13MPa: 350, shearModulus23MPa: 300,
   };
   const sourceUrl = "https://example.test/synthetic-acceptance-only";
-  const evidence = [
+  const nu12Evidence = { id: "tilted-nu12", label: "Synthetic measured nu12", status: "measured", unit: "ratio", value: 0.3, sourceUrl, sourceHash: fixtureHash(110), sourceLocator: "synthetic-only/tilted-nu12", dependsOn: [] };
+  const evidence = [nu12Evidence,
     ...Object.entries(properties).map(([key, value], index) => ({
       id: `tilted-${key}`, label: `Synthetic tilted acceptance ${key}`, status: "measured", unit: "MPa", value,
       sourceUrl, sourceHash: fixtureHash(index + 80), sourceLocator: `synthetic-only/tilted-${key}`, dependsOn: [],
@@ -709,7 +700,7 @@ async function recordSyntheticOrthotropicCoupon(
   ];
   const result = await call(client, "plasticity_record_material_coupon_data", {
     process,
-    properties,
+    properties, poissonRatio: 0.3, poissonRatioEvidence: [nu12Evidence.id],
     propertyEvidence: {
       youngModulusMPa: ["tilted-youngModulusMPa"], shearModulusMPa: ["tilted-shearModulusMPa"],
       tensileStrengthMPa: ["tilted-tensileStrengthMPa"], shearStrengthMPa: ["tilted-shearStrengthMPa"],
@@ -732,7 +723,7 @@ async function recordSyntheticOrthotropicCoupon(
     callerConfirmsPhysicalTests: true,
   });
   requireCondition(typeof result.record?.id === "string", "Synthetic coupon for the tilted print process was not recorded");
-  return { recordId: result.record.id };
+  return { recordId: result.record.id, nu12Evidence };
 }
 
 function fixtureHash(value: number): string {
@@ -754,7 +745,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>,
   const response = await client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 function toolText(response: unknown): string {
@@ -772,9 +763,6 @@ function requireCondition(condition: unknown, message: string): asserts conditio
   if (!condition) throw new Error(message);
 }
 
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
-  return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : []));
-}
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
