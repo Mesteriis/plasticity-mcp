@@ -782,7 +782,11 @@ The vector failure reproduces on both copies: volume 999.9996120023484 mm³,
 SPCurve edge, native validity success. Current 26.2.1 native-extrema body bounds
 are exactly 0..10 mm, while 26.1.3 FindBox still reaches Z=10.05 mm. Thus the
 new bounds method resolves the conservative box discrepancy on 26.2.1, but does
-not fix the vector path's curve representation or mass-property gate.
+not fix the vector path's curve representation or mass-property gate. A separate
+temporary native diagnostic on each version sampled 65 parameters and found
+maximum radial deviation 0.0004144400782291058 mm from R2 (sampled Z=10 mm).
+This is sampled evidence, not a continuous error certificate or accepted MCP
+coverage.
 
 The adapter now exposes explicit `projectionMethod: normal` for curve imprint.
 Existing calls retain default `vector` and their required nonzero direction.

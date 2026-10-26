@@ -49,3 +49,11 @@ was not repaired or relabeled as an analytic pass. Native-extrema bounds on
 26.2.1 now read 0..10 mm; legacy FindBox still reports max Z=10.05 mm for that
 SPCurve result. Neither a valid native check nor a loose box alone proves
 analytic-circle equivalence or a physical bulge.
+
+
+A separate temporary native diagnostic sampled 65 edge parameters on the vector
+SPCurve in each version. Both returned a maximum sampled radial deviation of
+0.0004144400782291058 mm from the requested R2 circle, with sampled Z=10 mm.
+This is sampled geometric evidence in addition to the mass discrepancy, not a
+certified bound over the continuous curve. These diagnostic calls do not add
+accepted MCP coverage.
