@@ -47,6 +47,7 @@ const HELP = `Usage:
   node scripts/verify-native-measure-datum-files-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
 Cases: ${MEASURE_FILE_CASES.join(", ")} (select with --case).
+Saved-plane cases require the selected experimental window to be in the foreground.
 
 No-argument and --help modes do not connect to Plasticity. Live mode requires
 an explicit empty disposable document, verifies native measurements, datums and isolated file workflows and

@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 140 | 148 |
-| Failing or blocked fixtures | 12 | 11 |
-| Tools with success in an application-connected passing fixture | 256 | 298 |
-| Tools attempted only in unaccepted fixtures | 4 | 3 |
-| Tools without a recorded application-connected live call | 111 | 70 |
+| Completed passing fixtures | 141 | 149 |
+| Failing or blocked fixtures | 12 | 10 |
+| Tools with success in an application-connected passing fixture | 259 | 301 |
+| Tools attempted only in unaccepted fixtures | 4 | 2 |
+| Tools without a recorded application-connected live call | 108 | 68 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -730,27 +730,44 @@ evidence, excluding the diagnostic endpoint/window dump.
 Both runs restore an empty document without groups or linked instances. Their
 stdio stores are scoped to new evidence directories. The explicit native-only
 scope is written to evidence; no screenshots are taken and rendering remains
-unaccepted. Accepted coverage is now 298/371 tools on 26.2.1 and 256/371 on 26.1.3.
+unaccepted. Together with the saved-plane fixture below, accepted coverage is now
+301/371 tools on 26.2.1 and 259/371 on 26.1.3.
 
-### Saved-plane fixture awaiting foreground preparation
+### Saved construction planes
 
-The new `saved-plane-frames` case in `accept:native-measure-datum-files` specifies
-five definitions: oblique explicit, planar face with offset, three points,
-standard-plane offset and axis rotation. Its intended gates include frame
-read-back, create/remove Undo/Redo, workplane activation, local rectangular
-profile bounds and profile Undo/Redo, protected standard-plane rejection, and
-restoration of the initial planes/workplane. Those gates are **not accepted**:
-the 26.2.1 attempt stopped at the first native plane creation because
-`document.hasFocus()` was false. No plane was created. Recovery restored the
-owned source box to the empty scene. The corresponding 26.1.3 case was not run.
+After manual focus preparation, the `saved-plane-frames` case passed on **both
+experimental versions**. Its initial 26.2.1 foreground rejection is superseded
+by a completed passing run of the same fixture, not treated as a successful call.
+The adapter's actual focus guard remains unchanged.
 
-Window activation did not satisfy the guard, and the system UI click could not
-locate the window. The adapter's foreground requirement remains unchanged.
-Manual focus preparation is needed before retrying; the checked-in case is a
-guarded, currently unqualified fixture. Earlier saved-plane results do not
-replace this failed attempt. Circle-imprint, legacy strict bounds and remaining
-viewport/manual gaps also remain open.
+```sh
+npm run accept:native-measure-datum-files -- --target ID \
+  --allow-disposable-mutations --case saved-plane-frames --output NEW_DIRECTORY
+```
+
+Five definitions are checked: an explicit oblique plane at (2,3,4) with normal
+(0,−1/√2,1/√2); the top face of a 10 × 20 × 30 mm box offset by 2 mm to
+(5,10,32); the same oblique plane through three points; a standard XY plane
+offset by 7 mm; and XY rotated 90° about world X, normal (0,−1,0).
+Origin tolerance is 0.00001 mm, normal/X-direction tolerance is 1e-8.
+Each saved plane is checked after creation and creation Undo/Redo, then activated
+without adding a native Undo step. A local 4 × 6 mm rectangular Wire/Region has
+its world bounds independently calculated from the checked frame; its Undo
+removes the profile and Redo restores the same Wire ID. The initial workplane
+is explicitly restored before plane deletion. Removal Undo restores the same
+plane/frame and Redo removes it again. The source body remains unchanged.
+
+Standard-plane deletion rejects without a revision/history change. Cleanup Undo
+restores the empty scene, exact initial saved/standard-plane descriptors and
+initial active workplane. Both versions also pass bounded diagnosis and complete
+filtered capability pagination. No production adapter change was required.
+
+A subsequent retry of the original full group fixture on manually focused
+26.1.3 still failed at screenshot: Electron reported `renderer is hidden`.
+This remains `viewport-unavailable`; native focus success does not establish
+rendered visibility. No pixel threshold or renderer/focus guard was relaxed.
+Circle-imprint, legacy strict bounds and other viewport/manual gaps remain open.
 
 Automated checks: 1467 root tests and typecheck pass; catalog counts, fixture
-references and `git diff --check` pass. These checks do not accept the blocked
-plane fixture or qualify rendered visibility.
+references and `git diff --check` pass. Both experimental documents finish
+empty and idle. Installed application and security settings were unchanged.
