@@ -364,3 +364,13 @@ unchanged. Synthetic schema attestations are not real physical tests or material
 qualification. Initial modern out-of-method deflection refusal remains unaccepted;
 method limits are preserved and explicitly checked. Coverage becomes 321/371
 modern and 285/371 legacy. FEM and manufactured-part validation remain separate.
+
+Synthetic joint-test tools: [three guarded cases](joint-test-qualification.md)
+pass on each experimental version. Fastener registries, interface nominal-strength
+statistics and classified corrected-curve summaries/CSV previews preserve their
+records across MCP restart and leave native scenes/history unchanged. A public
+failure-location mapping defect is fixed (`material-a` no longer escapes instead
+of `printed-material`); its original failed fixture is retained. Source bytes/hash,
+statistical exclusions, explicit unit conversions and curve work are checked.
+Coverage becomes 331/371 modern and 295/371 legacy. These synthetic checks are
+not physical material/joint qualification, cohesive calibration or FEM acceptance.
