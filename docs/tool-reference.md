@@ -285,12 +285,14 @@ confirmed dimensions.
 
 The live remote-download acceptance can be repeated with a selected direct
 asset URL. It temporarily imports the mesh into the explicit Plasticity window
-and undoes that operation only if the document revision is still the import
-revision; pre-existing scene geometry is preserved.
+with an explicit empty disposable scene and isolated stores. It checks source
+geometry, artifact hash, Undo/Redo and durable history after MCP restart, then
+restores the initial scene. Timeout/uncertain outcomes stop recovery mutations.
 
 ```sh
 npm run accept:reference-mesh-download -- \
   --target TARGET_ID \
+  --allow-disposable-mutations \
   --source-url https://raw.githubusercontent.com/Buildbee/example-stl/main/ascii-cube.stl \
   --source-page-url https://github.com/Buildbee/example-stl \
   --format stl \

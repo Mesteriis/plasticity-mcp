@@ -36,13 +36,27 @@ function validateAsciiStl(data: Buffer): StlValidation {
   }
   const bounds = emptyBounds();
   let triangleCount = 0;
+  let inSolid = false;
+  let solidTriangles = 0;
   let verticesInTriangle = 0;
   let inTriangle = false;
   let loopState: "none" | "open" | "closed" = "none";
-  for (const line of lines.slice(1, -1)) {
+  for (const line of lines) {
     const fields = line.split(/\s+/u);
+    if (/^solid$/iu.test(fields[0] ?? "")) {
+      if (inSolid || inTriangle) throw new Error("ASCII STL contains a nested or unfinished solid");
+      inSolid = true;
+      solidTriangles = 0;
+      continue;
+    }
+    if (/^endsolid$/iu.test(fields[0] ?? "")) {
+      if (!inSolid || inTriangle) throw new Error("ASCII STL contains an unmatched or unfinished solid");
+      if (solidTriangles === 0) throw new Error("ASCII STL solid contains no complete triangles");
+      inSolid = false;
+      continue;
+    }
     if (/^facet$/iu.test(fields[0] ?? "")) {
-      if (inTriangle || fields.length !== 5 || fields[1]!.toLowerCase() !== "normal") throw new Error("ASCII STL contains a malformed facet declaration");
+      if (!inSolid || inTriangle || fields.length !== 5 || fields[1]!.toLowerCase() !== "normal") throw new Error("ASCII STL contains a malformed facet declaration");
       fields.slice(2).forEach((value) => finite(value, "STL facet normal"));
       inTriangle = true;
       verticesInTriangle = 0;
@@ -69,13 +83,14 @@ function validateAsciiStl(data: Buffer): StlValidation {
     if (/^endfacet$/iu.test(fields[0] ?? "")) {
       if (!inTriangle || loopState !== "closed" || verticesInTriangle !== 3 || fields.length !== 1) throw new Error("ASCII STL facet must contain a closed loop with exactly three vertices");
       triangleCount += 1;
+      solidTriangles += 1;
       inTriangle = false;
       loopState = "none";
       continue;
     }
     throw new Error("ASCII STL contains unsupported or malformed facet syntax");
   }
-  if (inTriangle || triangleCount === 0) throw new Error("ASCII STL contains no complete triangles");
+  if (inSolid || inTriangle || triangleCount === 0) throw new Error("ASCII STL contains no complete triangles");
   return { triangles: triangleCount, bounds: finishBounds(bounds), format: "ascii" };
 }
 

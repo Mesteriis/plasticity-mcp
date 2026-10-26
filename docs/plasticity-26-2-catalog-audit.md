@@ -969,3 +969,52 @@ restoration and empty/idle cleanup pass. This completes the bounded foreground
 external-window lifecycle on both versions. Earlier stale-window failures remain
 separate; background freshness and default full-window MCP capture stay outside
 acceptance. No code changed; catalog counts/references and diff checks pass.
+
+## Local reference 3MF units, multi-mesh and provenance
+
+Three synthetic local 3MF variants pass on each experimental version: a 4 mm
+millimeter cube, the same cube encoded in meters, and two independently placed
+meshes. The strengthened verifier isolates every store, refuses annotations,
+section analyses/non-root groups, and stops recovery on unknown timeout or
+connection outcomes. It verifies public mesh/provenance listing, exact source
+artifact SHA-256, embedded-unit provenance, per-mesh bounds/counts, stable IDs
+through Undo/Redo, complete source restoration, and four completed durable events
+with in-sync status after MCP restart. All scenes finish empty and idle.
+
+[Commands and limits](reference-3mf-qualification.md) keep approximate reference
+meshes separate from exact B-Rep, rendered pixels and manufacturing acceptance.
+No network source, license or asset discovery is qualified by synthetic metadata.
+There is no production adapter change. A read-only default-window capture recheck
+still rejects hidden renderers on both versions without changing CAD/history.
+
+Tool coverage becomes 307/371 on 26.2.1 and 271/371 on 26.1.3, adding local 3MF
+import, reference mesh listing and provenance list/get. Existing failed fixtures
+remain. 1485 root tests, typecheck, catalog consistency and diff checks pass.
+
+## Pinned HTTPS 3MF, OBJ and multi-solid STL
+
+Four real production HTTPS imports pass on each experimental version: meter-unit
+3MF, a scaled/material-partitioned 3MF, indexed OBJ and a two-solid ASCII STL.
+The source revision, reviewed CC0 terms, independent SHA-256 preflight and
+observed native geometry are recorded in [the network contract](network-reference-qualification.md).
+No mocked transport or altered source is used.
+
+The initial STL run was rejected before CAD import because the validator did
+not accept sequential solid blocks. A focused parser fix now accepts complete
+blocks and rejects nested/unmatched/unfinished/empty blocks and facets outside
+blocks. Finite-coordinate and facet checks remain. Both native versions import
+the unchanged pinned file as one reference mesh with eight triangles. The
+original modern rejection remains a separate failed fixture.
+
+The remote STL/OBJ verifier now requires an empty disposable scene and explicit
+mutation consent, isolates every store, refuses embedded URL credentials,
+checks private artifact bytes/size/hash and source geometry, and verifies
+Undo/Redo, source snapshot restoration and four completed durable events after
+MCP restart. Source-unit interpretation is explicit for STL/OBJ. The 3MF verifier
+accepts matching full-commit URL/page pins and an optional reviewed hash while
+preserving the existing master-source path.
+
+Coverage is 309/371 on 26.2.1 and 273/371 on 26.1.3. 1490 root tests, typecheck,
+catalog consistency and diff checks pass. Scenes finish empty and idle. Rendered
+pixels, physical accuracy, arbitrary transport failures, asset discovery and
+STEP/Parasolid network imports remain outside this slice.

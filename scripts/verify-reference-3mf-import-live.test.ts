@@ -53,3 +53,58 @@ test("reference 3MF acceptance rejects unknown and incomplete options", () => {
   assert.throws(() => parseReference3mfAcceptanceArgs(["--target"]), /requires a value/);
   assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--license"]), /requires a value/);
 });
+
+test("3MF empty-scene guard includes annotations, section analyses and non-root groups", async () => {
+  const { requireSceneEmpty } = await import("./verify-reference-3mf-import-live.ts");
+  const empty = { bodies: [], regions: [], groups: [{ id: 0 }] };
+  assert.equal(requireSceneEmpty(empty), true);
+  for (const field of ["bodies", "regions", "instances", "referenceMeshes", "measurements", "sectionAnalyses"]) {
+    assert.equal(requireSceneEmpty({ ...empty, [field]: [{ id: 1 }] }), false, field);
+  }
+  assert.equal(requireSceneEmpty({ ...empty, groups: [{ id: 0 }, { id: 1 }] }), false);
+});
+
+test("3MF verifier stops recovery mutations for unknown timeout and disconnect outcomes", async () => {
+  const { reference3mfFailureNeedsReconcile } = await import("./verify-reference-3mf-import-live.ts");
+  for (const message of ["CDP request timed out: Runtime.callFunctionOn", "MCP error: timeout", "Previous mutation outcome is uncertain", "CDP connection closed before the request completed"]) {
+    assert.equal(reference3mfFailureNeedsReconcile(new Error(message)), true);
+  }
+  assert.equal(reference3mfFailureNeedsReconcile(new Error("3MF unit provenance was not retained")), false);
+});
+
+test("local 3MF fixtures encode embedded units and two independently placed meshes", async () => {
+  const { referenceCube3mf } = await import("./verify-reference-3mf-import-live.ts");
+  const { validateReferenceThreeMfArchive } = await import("../src/plasticity/three-mf.ts");
+  for (const fixture of ["millimeter", "meter", "two-meshes"] as const) {
+    const parsed = validateReferenceThreeMfArchive(referenceCube3mf(fixture));
+    const count = fixture === "two-meshes" ? 2 : 1;
+    assert.equal(parsed.modelUnit, fixture === "meter" ? "meter" : "millimeter");
+    assert.equal(parsed.objects, count);
+    assert.equal(parsed.buildItems, count);
+    assert.equal(parsed.vertices, 8 * count);
+    assert.equal(parsed.triangles, 12 * count);
+    assert.deepEqual(parsed.boundsMm, { min: [0, 0, 0], max: [count === 2 ? 14 : 4, 4, 4], size: [count === 2 ? 14 : 4, 4, 4] });
+  }
+  assert.equal(parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "meter"]).localFixture, "meter");
+  assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "unknown"]), /--local-fixture must/);
+  assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--local-fixture", "meter", "--source-url", "https://example.test/model.3mf", "--source-page-url", "https://example.test/models", "--license", "synthetic"]), /cannot be combined/);
+});
+
+test("remote 3MF fixture URLs accept full commit pins only with matching source pages", () => {
+  const ref = "e1bbc8eec047c2fb604b71f7e4793c3e0189fd6d";
+  const source = `https://raw.githubusercontent.com/Ghostkeeper/SlicerTestModels/${ref}/3mf/unit_meters.3mf`;
+  const page = `https://github.com/Ghostkeeper/SlicerTestModels/tree/${ref}/3mf`;
+  assert.doesNotThrow(() => validateReference3mfFixtureSource("unit-meters", source, page));
+  assert.throws(() => validateReference3mfFixtureSource("unit-meters", source, page.replace(ref, "master")), /same revision/);
+  for (const invalid of [source.replace(ref, "main"), source.replace("https:", "http:"), source.replace("https://", "https://user:pass@"), source + "?token=secret", source + "#fragment", source.replace(".com/", ".com:8443/")]) {
+    assert.throws(() => validateReference3mfFixtureSource("unit-meters", invalid, page), /selected unit-meters/);
+  }
+});
+
+test("remote expected artifact hashes require an explicit remote source and a full SHA-256", () => {
+  const hash = "a".repeat(64);
+  const remote = [...localArgs, "--source-url", "https://raw.githubusercontent.com/Ghostkeeper/SlicerTestModels/master/3mf/unit_meters.3mf", "--source-page-url", "https://github.com/Ghostkeeper/SlicerTestModels/tree/master/3mf", "--license", "CC0-1.0"];
+  assert.equal(parseReference3mfAcceptanceArgs([...remote, "--expected-sha256", hash]).expectedSha256, hash);
+  assert.throws(() => parseReference3mfAcceptanceArgs([...remote, "--expected-sha256", "short"]), /64 lowercase hex/);
+  assert.throws(() => parseReference3mfAcceptanceArgs([...localArgs, "--expected-sha256", hash]), /requires a remote source/);
+});

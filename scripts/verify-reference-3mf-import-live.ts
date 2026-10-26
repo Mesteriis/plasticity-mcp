@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-import { sanitizeEvidence } from "./verify-section-strength-live.ts";
+import { isolatedAcceptanceEnvironment } from "./verify-native-measure-datum-files-live.ts";
+import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -15,11 +17,15 @@ interface Options {
   target?: string;
   output?: string;
   allowDisposableMutations: boolean;
+  localFixture?: LocalReference3mfFixture;
   sourceFixture?: Reference3mfFixture;
   sourceUrl?: string;
   sourcePageUrl?: string;
   license?: string;
+  expectedSha256?: string;
 }
+
+export type LocalReference3mfFixture = "millimeter" | "meter" | "two-meshes";
 
 export type Reference3mfFixture = "unit-meters" | "multi-mesh";
 
@@ -50,8 +56,13 @@ export function getReference3mfFixtureExpectation(fixture: Reference3mfFixture):
 
 export function validateReference3mfFixtureSource(fixture: Reference3mfFixture, sourceUrlValue: string, sourcePageUrl: string): void {
   const sourceUrl = new URL(sourceUrlValue);
-  requireCondition(sourceUrl.hostname === "raw.githubusercontent.com" && sourceUrl.pathname === `/Ghostkeeper/SlicerTestModels/master/3mf/${REFERENCE_3MF_FIXTURES[fixture].file}`, `Remote source URL must identify the selected ${fixture} acceptance fixture`);
-  requireCondition(sourcePageUrl === "https://github.com/Ghostkeeper/SlicerTestModels/tree/master/3mf", "Remote source page must identify the reviewed SlicerTestModels 3MF directory");
+  const parts = sourceUrl.pathname.split('/');
+  const ref = parts[3];
+  requireCondition(sourceUrl.origin === "https://raw.githubusercontent.com" && !sourceUrl.username && !sourceUrl.password && !sourceUrl.search && !sourceUrl.hash
+    && parts.length === 6 && parts[1] === "Ghostkeeper" && parts[2] === "SlicerTestModels" && parts[4] === "3mf"
+    && parts[5] === REFERENCE_3MF_FIXTURES[fixture].file && (ref === "master" || /^[a-f0-9]{40}$/.test(ref ?? "")),
+    `Remote source URL must identify the selected ${fixture} acceptance fixture`);
+  requireCondition(sourcePageUrl === `https://github.com/Ghostkeeper/SlicerTestModels/tree/${ref}/3mf`, "Remote source page must identify the reviewed SlicerTestModels 3MF directory at the same revision");
 }
 
 export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
@@ -60,17 +71,25 @@ export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
     const argument = argv[index];
     if (argument === "--help") options.help = true;
     else if (argument === "--allow-disposable-mutations") options.allowDisposableMutations = true;
-    else if (["--target", "--output", "--source-fixture", "--source-url", "--source-page-url", "--license"].includes(argument ?? "")) {
+    else if (["--target", "--output", "--local-fixture", "--source-fixture", "--source-url", "--source-page-url", "--license", "--expected-sha256"].includes(argument ?? "")) {
       const value = argv[++index];
       if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
       if (argument === "--target") options.target = value;
       else if (argument === "--output") options.output = value;
+      else if (argument === "--local-fixture") {
+        if (!["millimeter", "meter", "two-meshes"].includes(value)) throw new Error("--local-fixture must be millimeter, meter or two-meshes");
+        options.localFixture = value as LocalReference3mfFixture;
+      }
       else if (argument === "--source-fixture") {
         if (!Object.hasOwn(REFERENCE_3MF_FIXTURES, value)) throw new Error("--source-fixture must be one of: unit-meters, multi-mesh");
         options.sourceFixture = value as Reference3mfFixture;
       }
       else if (argument === "--source-url") options.sourceUrl = requireHttpsUrl(value, argument);
       else if (argument === "--source-page-url") options.sourcePageUrl = requireHttpsUrl(value, argument);
+      else if (argument === "--expected-sha256") {
+        if (!/^[a-f0-9]{64}$/.test(value)) throw new Error("--expected-sha256 must be 64 lowercase hex characters");
+        options.expectedSha256 = value;
+      }
       else options.license = value;
     } else throw new Error(`Unknown argument: ${String(argument)}`);
   }
@@ -80,6 +99,8 @@ export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
   if (!options.output) throw new Error("Live 3MF acceptance requires --output with a new directory");
   if (Boolean(options.sourceUrl) !== Boolean(options.sourcePageUrl)) throw new Error("Remote 3MF acceptance requires both --source-url and --source-page-url");
   if (options.sourceFixture && !options.sourceUrl) throw new Error("--source-fixture requires --source-url and --source-page-url");
+  if (options.expectedSha256 && !options.sourceUrl) throw new Error("--expected-sha256 requires a remote source");
+  if (options.localFixture && options.sourceUrl) throw new Error("--local-fixture cannot be combined with a remote source");
   if (options.sourceUrl && !options.license) throw new Error("Remote 3MF acceptance requires --license with the reviewed asset terms");
   return options;
 }
@@ -87,16 +108,18 @@ export function parseReference3mfAcceptanceArgs(argv: string[]): Options {
 const HELP = `Usage:
   node scripts/verify-reference-3mf-import-live.ts --help
   node scripts/verify-reference-3mf-import-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
-  node scripts/verify-reference-3mf-import-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY --source-fixture unit-meters|multi-mesh --source-url HTTPS_3MF_URL --source-page-url HTTPS_SOURCE_PAGE --license REVIEWED_LICENSE
+  node scripts/verify-reference-3mf-import-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY --source-fixture unit-meters|multi-mesh --source-url HTTPS_3MF_URL --source-page-url HTTPS_SOURCE_PAGE --license REVIEWED_LICENSE [--expected-sha256 HASH]
 
 No-argument and --help modes do not connect to Plasticity. Live mode requires
 an explicit empty disposable document. By default, it creates a 4 mm unit-aware
-3MF cube and imports it through the public stdio MCP. When direct source inputs
+3MF cube (or --local-fixture meter|two-meshes) and imports it through the public stdio MCP. When direct source inputs
 are supplied, it downloads the selected remote 3MF through the public MCP
 instead. Remote fixtures exercise embedded-unit conversion (one mesh) or a
 multi-mesh model (two meshes). Each expected mesh is matched by topology and
 measured bounds independent of list ordering. Both modes test Undo/Redo,
-restore the initial scene, and write sanitized evidence.`;
+restore the initial scene, and write sanitized evidence. Remote URLs may use
+master or a full commit SHA with a matching source-page revision. An optional
+--expected-sha256 checks the acquired artifact against an independent preflight.`;
 
 async function main(): Promise<void> {
   const options = parseReference3mfAcceptanceArgs(process.argv.slice(2));
@@ -104,9 +127,9 @@ async function main(): Promise<void> {
   const output = resolve(options.output!);
   await mkdir(output, { recursive: false, mode: 0o700 });
   const sourcePath = join(output, "reference-cube-4mm.3mf");
-  if (!options.sourceUrl) await writeFile(sourcePath, referenceCube3mf(), { flag: "wx", mode: 0o600 });
+  if (!options.sourceUrl) await writeFile(sourcePath, referenceCube3mf(options.localFixture), { flag: "wx", mode: 0o600 });
   const evidence: Record<string, unknown> = {
-    schemaVersion: 1, startedAt: new Date().toISOString(), targetId: options.target!, workbenchUsed: false,
+    schemaVersion: 1, localFixture: options.sourceUrl ? undefined : options.localFixture ?? "millimeter", startedAt: new Date().toISOString(), targetId: options.target!, workbenchUsed: false,
   };
   let client: Client | undefined;
   let initial: any;
@@ -151,6 +174,7 @@ async function main(): Promise<void> {
       };
     } else {
       expectedMeshes = [{ boundsMinMm: [0, 0, 0], boundsMaxMm: [4, 4, 4], vertexEntries: 8, triangles: 12 }];
+      if (options.localFixture === "two-meshes") expectedMeshes.push({ boundsMinMm: [10, 0, 0], boundsMaxMm: [14, 4, 4], vertexEntries: 8, triangles: 12 });
       state = await call(client, "plasticity_import_reference_3mf", {
         path: sourcePath,
         source: {
@@ -166,8 +190,19 @@ async function main(): Promise<void> {
     verifyImportedMeshes(meshes, expectedMeshes, "3MF import");
     requireCondition(state.sourceReference?.unitSource === "embedded-3mf-model-metadata", "3MF unit provenance was not retained");
     requireCondition(state.provenancePersisted === true && typeof state.referenceRecordId === "string", "3MF import provenance was not persisted");
+    const listedMeshes = await call(client, "plasticity_list_reference_meshes", {});
+    verifyImportedMeshes(listedMeshes.referenceMeshes, expectedMeshes, "3MF mesh listing");
+    const listedImports = await call(client, "plasticity_list_cad_reference_imports", { offset: 0, limit: 10 });
+    requireCondition(listedImports.total === 1 && listedImports.records.length === 1 && listedImports.records[0].id === state.referenceRecordId
+      && listedImports.records[0].historical === true && listedImports.records[0].referenceMeshCount === meshes.length, "Isolated provenance listing did not match the import");
     importedRecordId = state.referenceRecordId;
     importedArtifactHash = state.referenceArtifactHash;
+    if (options.sourceUrl) {
+      requireCondition(state.acquisition?.bytes > 0 && state.acquisition.finalUrl === options.sourceUrl, "Unexpected remote acquisition size or final URL");
+      if (options.expectedSha256) requireCondition(importedArtifactHash === options.expectedSha256, "Downloaded 3MF artifact differs from independently reviewed SHA-256");
+      evidence.acquisition = { bytes: state.acquisition.bytes, finalUrl: withoutQuery(state.acquisition.finalUrl), artifactHash: importedArtifactHash, expectedSha256: options.expectedSha256 };
+    }
+    if (!options.sourceUrl) requireCondition(importedArtifactHash === createHash("sha256").update(await readFile(sourcePath)).digest("hex"), "Provenance hash does not identify the original local 3MF bytes");
     const record = await call(client, "plasticity_get_cad_reference_import", { id: state.referenceRecordId });
     requireCondition(record.format === "3mf" && record.artifactHash === state.referenceArtifactHash, "Persistent 3MF import record does not match the imported artifact");
     requireCondition(record.referenceMeshes?.length === meshes.length, "Persistent 3MF import record omitted an imported mesh");
@@ -188,13 +223,21 @@ async function main(): Promise<void> {
     state = await call(client, "plasticity_undo", { intent: "Restore the initial empty scene after 3MF acceptance", revision: state.revision });
     requireEmpty(state, "final scene");
     const changes = await call(client, "plasticity_changes_since", { snapshotId: snapshot.snapshotId });
-    requireCondition(changes.diff.referenceMeshesChanged === false && changes.diff.added.length === 0 && changes.diff.removed.length === 0 && changes.diff.modified.length === 0, "Scene did not return to the initial snapshot after cleanup");
+    requireCondition(!hasSceneContentChanges(changes.diff), "Scene did not return to the initial snapshot after cleanup");
     const journal = await call(client, "plasticity_construction_journal", {});
-    requireCondition(journal.syncStatus === "in-sync", "Construction journal is not synchronized after Undo cleanup");
+    requireCondition(journal.syncStatus === "in-sync" && journal.durableSyncStatus === "in-sync" && journal.journalPersistenceWarnings.length === 0, "Construction journal is not synchronized after Undo cleanup");
     await client.close();
     client = await startMcp(join(output, "strength-store"));
     const recovered = await call(client, "plasticity_get_cad_reference_import", { id: importedRecordId });
     requireCondition(recovered.artifactHash === importedArtifactHash && recovered.referenceMeshes?.length === expectedMeshes.length, "3MF provenance did not survive production MCP restart");
+    const restartedState = await call(client, "plasticity_connect", { targetId: options.target });
+    requireEmpty(restartedState, "scene after MCP restart");
+    requireCondition(restartedState.documentToken === state.documentToken && restartedState.revision === state.revision, "MCP restart changed the CAD document");
+    const durableHistory = await call(client, "plasticity_construction_history", { offset: 0, limit: 100 });
+    requireCondition(durableHistory.total === 4 && durableHistory.entries.length === 4 && durableHistory.entries.every((entry: any) => entry.status === "completed"), "Isolated durable history must contain all four completed import/Undo/Redo/Undo events");
+    const restartedJournal = await call(client, "plasticity_construction_journal", {});
+    requireCondition(restartedJournal.durableSyncStatus === "in-sync", "Durable journal lost sync after MCP restart");
+    evidence.durableHistory = { completedEvents: durableHistory.total, syncAfterRestart: restartedJournal.durableSyncStatus };
     evidence.provenanceAfterMcpRestart = { recovered: true, format: recovered.format, referenceMeshCount: recovered.referenceMeshes.length };
     evidence.undoRedo = true;
     evidence.cleanup = { restoredEmptyDocument: true, journal: journal.syncStatus };
@@ -202,7 +245,7 @@ async function main(): Promise<void> {
     await writeExclusive(join(output, "evidence.json"), sanitizeEvidence(evidence));
     console.log(JSON.stringify({ ok: true, output, evidence: join(output, "evidence.json"), mesh: evidence.imported }));
   } catch (error) {
-    if (client && initial && state && state.documentToken === initial.documentToken) {
+    if (!reference3mfFailureNeedsReconcile(error) && client && initial && state && state.documentToken === initial.documentToken) {
       try {
         const current = await call(client, "plasticity_status", {});
         if (current.documentToken === initial.documentToken && current.revision === state.revision && current.undoDepth > initial.undoDepth) {
@@ -221,10 +264,9 @@ async function main(): Promise<void> {
 }
 
 async function startMcp(storeRoot: string): Promise<Client> {
-  const environment = Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof process.env[key] === "string" ? [[key, process.env[key]!]] : []));
   const transport = new StdioClientTransport({
     command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot,
-    env: { ...environment, PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_REFERENCE_ROOT: join(storeRoot, "references"), PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" }, stderr: "pipe",
+    env: isolatedAcceptanceEnvironment(storeRoot, process.env), stderr: "pipe",
   });
   const client = new Client({ name: "plasticity-reference-3mf-live", version: "1.0.0" });
   await client.connect(transport);
@@ -246,7 +288,13 @@ function toolText(response: unknown): string {
 }
 
 function requireEmpty(state: any, label: string): void { requireCondition(requireSceneEmpty(state), `${label} is not empty`); }
-function requireSceneEmpty(state: any): boolean { return state.bodies.length === 0 && state.regions.length === 0 && (state.instances ?? []).length === 0 && (state.referenceMeshes ?? []).length === 0; }
+export function requireSceneEmpty(state: any): boolean {
+  return state.bodies.length === 0 && state.regions.length === 0 && (state.instances ?? []).length === 0 && (state.referenceMeshes ?? []).length === 0
+    && (state.measurements ?? []).length === 0 && (state.sectionAnalyses ?? []).length === 0 && (state.groups ?? []).every((group: any) => group.id === 0);
+}
+export function reference3mfFailureNeedsReconcile(error: unknown): boolean {
+  return /timed out|timeout|uncertain|connection.*closed/i.test(error instanceof Error ? error.message : String(error));
+}
 function verifyImportedMeshes(meshes: any[], expectedMeshes: ExpectedReferenceMesh[], label: string): void {
   requireCondition(meshes.length === expectedMeshes.length, `${label} expected ${expectedMeshes.length} reference meshes, received ${meshes.length}`);
   const remaining = [...meshes];
@@ -277,10 +325,13 @@ function requireHttpsUrl(value: string, option: string): string {
 }
 function withoutQuery(value: string): string { const url = new URL(value); return `${url.origin}${url.pathname}`; }
 function writeExclusive(path: string, value: unknown): Promise<void> { return writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 }); }
-function referenceCube3mf(): Buffer {
+export function referenceCube3mf(fixture: LocalReference3mfFixture = "millimeter"): Buffer {
   const vertices = [[0,0,0],[4,0,0],[4,4,0],[0,4,0],[0,0,4],[4,0,4],[4,4,4],[0,4,4]];
   const triangles = [[0,2,1],[0,3,2],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[1,2,6],[1,6,5],[2,3,7],[2,7,6],[3,0,4],[3,4,7]];
-  const model = `<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices>${vertices.map(([x,y,z]) => `<vertex x="${x}" y="${y}" z="${z}"/>`).join("")}</vertices><triangles>${triangles.map(([v1,v2,v3]) => `<triangle v1="${v1}" v2="${v2}" v3="${v3}"/>`).join("")}</triangles></mesh></object></resources><build><item objectid="1"/></build></model>`;
+  const unit = fixture === "meter" ? "meter" : "millimeter";
+  const scale = fixture === "meter" ? .001 : 1;
+  const objects = [0, ...(fixture === "two-meshes" ? [10] : [])].map((offset, index) => `<object id="${index + 1}" type="model"><mesh><vertices>${vertices.map(([x,y,z]) => `<vertex x="${(x! + offset) * scale}" y="${y! * scale}" z="${z! * scale}"/>`).join("")}</vertices><triangles>${triangles.map(([v1,v2,v3]) => `<triangle v1="${v1}" v2="${v2}" v3="${v3}"/>`).join("")}</triangles></mesh></object>`);
+  const model = `<model unit="${unit}" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>${objects.join("")}</resources><build>${objects.map((_, index) => `<item objectid="${index + 1}"/>`).join("")}</build></model>`;
   return storedZip([
     ["[Content_Types].xml", Buffer.from('<Types><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>')],
     ["_rels/.rels", Buffer.from('<Relationships><Relationship Target="/3D/3dmodel.model"/></Relationships>')],
