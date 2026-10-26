@@ -28,6 +28,8 @@ export const NATIVE_VIEWPORT_CAPTURE = `function () {
       !(viewport.lastFrameNumber > previousTime) || viewport.needsRender !== false || renderer.getContext() !== context || context.isContextLost()) {
     throw new Error('Native viewport did not complete a fresh frame');
   }
+  // Native rendering can advance camera controls while RAF is suspended.
+  for (const tag of this.__plasticityMcpDistanceOverlays?.values() ?? []) tag.refreshLabels?.();
   // Serialize synchronously after drawing, before a non-preserved buffer is discarded.
   const dataUrl = canvas.toDataURL('image/png');
   if (context.isContextLost()) throw new Error('Native viewport WebGL context was lost during capture');

@@ -623,7 +623,13 @@ export class PlasticityOperations {
             }
             tag.frameId = requestAnimationFrame(updateLabels);
           };
-          updateLabels();
+          // Hidden renderers may suspend RAF. Keep an explicit refresh without
+          // starting a second animation loop when a caller advances the camera.
+          tag.refreshLabels = () => {
+            if (tag.frameId !== undefined) cancelAnimationFrame(tag.frameId);
+            updateLabels();
+          };
+          tag.refreshLabels();
         }
         for (const viewport of viewports) viewport.setNeedsRender();
       }`, ["LineSegmentHelper", "Vector3", "Vector2", "makeAxisAlignedMeasurementPath"], [{
@@ -9710,6 +9716,7 @@ export class PlasticityOperations {
         }
       }
       viewport.setNeedsRender();
+      for (const tag of this.__plasticityMcpDistanceOverlays?.values() ?? []) tag.refreshLabels?.();
       return { position: viewport.camera.position.toArray(), target: viewport.camera.target.toArray(), mode: viewport.camera.mode };
     }`, [{ view, fit }]);
   }

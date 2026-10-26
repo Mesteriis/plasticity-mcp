@@ -897,3 +897,26 @@ finish empty and idle; installed application and security settings were unchange
 Validation: 1478 root tests and typecheck pass, including three regressions for
 the independent box verifier. Catalog counts/references and `git diff --check`
 pass. Original legacy strict bounds and other parameter/window/manual gaps remain.
+
+
+## HTML measurement label lifecycle
+
+PR #26 is merged. The next continuation fixes stale HTML distance-label anchors
+when the renderer suspends RAF. Camera changes and native viewport rendering now
+refresh labels synchronously without duplicating animation loops. Both experimental
+versions pass nine native/HTML-layout phases: creation, camera, move, move Undo/Redo,
+delete, delete Undo/Redo and deletion of all dimensions. Empty scene/snapshot and
+in-sync durable journal cleanup pass. The original stale-camera failure was
+reproduced on both versions before the patch.
+
+[Commands, assertions and limitations](html-measurement-labels.md) distinguish
+DOM/layout evidence from rasterized HTML glyphs and full-window pixels. Native
+measurement names are lost after a transform on both versions; stable-ID and
+numeric lifecycle checks pass, while name persistence remains unresolved.
+Coverage remains 303/371 on 26.2.1 and 266/371 on 26.1.3; this continuation
+qualifies an additional workflow without claiming new tool names. Existing
+parameter/window/manual failures remain. Installed applications and security
+settings were unchanged.
+
+Validation: 1480 root tests and typecheck pass, including executed callback and
+capture-order regressions plus live-runner guards.

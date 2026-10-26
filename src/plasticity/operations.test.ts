@@ -1314,6 +1314,30 @@ test("synchronizes visible native distance-measurement overlays with exact B-Rep
   assert.match(calls[0]?.source ?? "", /manager\.set\(key, tag\)/);
   assert.match(calls[0]?.source ?? "", /manager\.get\(key\) !== tag/);
 
+  // Execute the emitted callback with suspended RAF, then explicitly refresh.
+  const source = calls[0]!.source;
+  const callback = source.slice(source.indexOf("          const updateLabels ="), source.indexOf("          tag.refreshLabels();") + "          tag.refreshLabels();".length);
+  let nextFrame = 0;
+  const pending = new Map<number, () => void>();
+  const label = { style: {} as Record<string, string>, removed: false, remove() { this.removed = true; } };
+  const tag: any = {};
+  const manager = new Map([["measurement", tag]]);
+  const point = { x: 0, y: 0, z: 0 };
+  Function("manager", "key", "tag", "labels", "labelPoint", "requestAnimationFrame", "cancelAnimationFrame", callback)(
+    manager, "measurement", tag,
+    [{ label, viewport: { camera: { updateMatrixWorld() {} }, container: { clientWidth: 100, clientHeight: 80 } } }],
+    { clone: () => ({ project: () => point }) },
+    (fn: () => void) => { pending.set(++nextFrame, fn); return nextFrame; },
+    (id: number) => pending.delete(id),
+  );
+  assert.equal(label.style.left, "50px");
+  for (let i = 0; i < 3; i++) { point.x = .5; tag.refreshLabels(); assert.equal(pending.size, 1); }
+  assert.equal(label.style.left, "75px");
+  point.z = 2; tag.refreshLabels(); assert.equal(label.style.display, "none");
+  manager.clear(); tag.refreshLabels();
+  assert.equal(pending.size, 0);
+  assert.equal(label.removed, true);
+
   await operations.state();
   assert.equal(calls.length, 1, "an unchanged measurement revision should not rebuild its overlay");
 

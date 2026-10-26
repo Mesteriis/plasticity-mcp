@@ -57,3 +57,10 @@ test("context loss during PNG encoding rejects the captured image", () => {
   f.viewport.renderer.domElement.toDataURL = () => { f.viewport.renderer.getContext().isContextLost = () => true; return "data:image/png;base64,AQ=="; };
   assert.throws(() => capture.call(f.editor), /lost during capture/);
 });
+
+test("viewport capture refreshes HTML anchors after native camera advancement and before encoding", () => {
+  const f = fixture();
+  const editor = { ...f.editor, __plasticityMcpDistanceOverlays: new Map([[1, { refreshLabels() { f.calls.push("labels"); } }], [2, {}]]) };
+  capture.call(editor);
+  assert.deepEqual(f.calls, ["request", "draw", "labels", "encode"]);
+});
