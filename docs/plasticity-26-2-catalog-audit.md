@@ -1,7 +1,7 @@
 # Catalog audit on disposable Plasticity copies
 
-Date: 2026-10-26. The current continuation starts from merged PR #30
-(`8a771f48a312cb0209ca17b697795078ecddfcb3`); earlier fixtures start from PR #12. Both application bundles are
+Date: 2026-10-26. The current continuation starts from merged PR #31
+(`bcb9fbb8dd94fb3f3c5bdcec43202e6da95be4ce`); earlier fixtures start from PR #12. Both application bundles are
 separate experimental copies. The installed application and system security
 settings were not changed.
 
@@ -29,11 +29,11 @@ and raw runtime dumps are excluded from the checked-in matrix.
 
 | Result | 26.1.3 copy | Experimental 26.2.1 copy |
 | --- | ---: | ---: |
-| Completed passing fixtures | 163 | 171 |
-| Failing or blocked fixtures | 13 | 14 |
-| Tools with success in an application-connected passing fixture | 285 | 321 |
+| Completed passing fixtures | 166 | 174 |
+| Failing or blocked fixtures | 13 | 15 |
+| Tools with success in an application-connected passing fixture | 295 | 331 |
 | Tools attempted only in unaccepted fixtures | 0 | 0 |
-| Tools without a recorded application-connected live call | 86 | 50 |
+| Tools without a recorded application-connected live call | 76 | 40 |
 
 The different counts reflect the executed scenarios, not a claim that the
 remaining tools fail or that 26.1 has lost support. An additional host-only stdio
@@ -1099,3 +1099,34 @@ catalog count/reference consistency and diff checks pass. Both copies finish
 empty and idle. No installed application, settings or security configuration was
 changed. This slice does not qualify FEM, physical coupon authenticity, actual
 printed strength, manufacturing or rendered pixels.
+
+## Joint-test registries and pure-mode interface curve
+
+PR #31 is merged. Three guarded production stdio cases pass on each experimental
+version: fastener-test registry, direct interface specimen strength/CSV and a
+classified pure-mode curve/CSV summary. [Inputs, numeric gates and boundaries](joint-test-qualification.md)
+record that all data and physical-schema attestations are synthetic in isolated
+stores; no physical tests or part qualification are claimed.
+
+A real public-response defect was reproduced before the fix: specimen calculation
+leaked internal `material-a` instead of preserving public `printed-material`.
+The callback now translates the response consistently with CSV previews and
+registered records. A focused MCP regression failed before the fix and passes
+after it for all five public failure locations. Calculation algorithms, storage
+and statistics are unchanged. The initial live failure remains a separate
+unaccepted fixture; successful corrected runs do not erase it.
+
+Registry cases verify idempotency, exact matching, mismatch/conflict handling
+and restart equality. Direct strength checks force/area and descriptive statistics
+while excluding bulk failure; an all-fixture-failure series yields null statistics.
+Both CSV previews preserve source bytes/hash and do not register tests. Curve
+checks verify explicit um/kPa conversion, 1 MPa peak, 100 MPa/mm first-segment
+stiffness and 0.015 N/mm trapezoidal work; incomplete curves, wrong classification
+and off-normal loading are rejected. Stored curve analysis is identical after
+restart. Scene snapshots and native identity/history remain unchanged.
+
+Coverage becomes 331/371 modern and 295/371 legacy. 1507 root tests, typecheck,
+catalog count/reference consistency and diff checks pass. Both copies finish
+empty and idle; installed apps/settings/security are unchanged. This does not
+qualify physical source authenticity, fracture-energy-from-crack-growth methods,
+mixed-mode cohesive calibration, rendered geometry, manufacturing or FEM.

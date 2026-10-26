@@ -4220,3 +4220,18 @@ async function reportFiles(root: string): Promise<string[]> {
     throw error;
   }
 }
+
+test("specimen calculation preserves one-material public failure locations", async context => {
+  const harness = await createHarness(context, {});
+  const locations = ["interface", "printed-material", "mixed", "fixture", "unknown"];
+  const calculated = output(await harness.client.callTool({
+    name: "plasticity_calculate_interface_specimen_strengths",
+    arguments: { specimens: locations.map((failureLocation, index) => ({
+      specimenId: `synthetic-${index}`, peakForceN: 10, netCrossSectionMm2: 2,
+      failureLocation, sourceHash: "a".repeat(64), sourceLocator: "synthetic regression fixture",
+    })) },
+  }));
+  assert.deepEqual(calculated.specimens.map((s: { failureLocation: string }) => s.failureLocation), locations);
+  assert.deepEqual(calculated.specimens.map((s: { nominalPeakStrengthMPa: number }) => s.nominalPeakStrengthMPa), [5, 5, 5, 5, 5]);
+  assert.equal(calculated.summary.interfaceFailureCount, 1);
+});

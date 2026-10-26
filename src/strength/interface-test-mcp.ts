@@ -114,12 +114,23 @@ export function registerMaterialInterfaceTestTools(server: McpServer, store: Int
     "Calculate nominal peak stress for each directly loaded physical specimen as measured peak force in N divided by measured net cross-section in mm² (N/mm² = MPa). Preserves per-specimen failure location and hashed source locator; only specimens confirmed to fail at the printed interface contribute to the descriptive range, mean and sample standard deviation. Other failures remain individually visible and are excluded; no interface failures yields null summary values. These values are not local interface tractions, design allowables, statistically qualified bounds or a cohesive law.",
     interfaceSpecimenStrengthMcpInputSchema,
     readonly,
-    async (input) => calculateInterfaceSpecimenStrengths({
-      specimens: input.specimens.map((specimen) => ({
-        ...specimen,
-        failureLocation: specimen.failureLocation === "printed-material" ? "material-a" : specimen.failureLocation,
-      })),
-    }),
+    async (input) => {
+      const calculation = calculateInterfaceSpecimenStrengths({
+        specimens: input.specimens.map((specimen) => ({
+          ...specimen,
+          failureLocation: specimen.failureLocation === "printed-material" ? "material-a" : specimen.failureLocation,
+        })),
+      });
+      return {
+        ...calculation,
+        specimens: calculation.specimens.map((specimen) => ({
+          ...specimen,
+          failureLocation: specimen.failureLocation === "material-a" || specimen.failureLocation === "material-b"
+            ? "printed-material" as const
+            : specimen.failureLocation,
+        })),
+      };
+    },
   );
 
   tool(
