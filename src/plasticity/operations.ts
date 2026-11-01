@@ -2196,7 +2196,7 @@ export class PlasticityOperations {
       };
       return {
         bodyIds: Array.from(selection.items ?? []).map(stableId).filter(Number.isInteger),
-        curveIds: Array.from(selection.curveIds ?? []).map(Number).filter(Number.isInteger),
+        curveIds: Array.from(selection.curveIds ?? []).map(versionId => nativeApi.db.lookupStableId(versionId) ?? null).filter(Number.isInteger),
         instanceIds: Array.from(selection.empties ?? [])
           .filter(empty => empty?.constructor?.name === 'InstanceEmpty')
           .map(empty => Number(empty.versionId))
