@@ -6826,3 +6826,22 @@ test("item transform preserves missing native measurement names by stable ID ins
   await assert.rejects(execute(editor, { async commit() { throw Error("native failure"); } }), /native failure/);
   assert.equal(current, original);
 });
+
+test("selection reports selected curves by body ID instead of the native version ID", async () => {
+  const state: RuntimeState = { targetId: "window-1", title: "Fixture", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const editor = {
+    db: { lookupStableId: (versionId: number) => (versionId === 17 ? 7 : undefined) },
+    geo: {},
+    // Version 99 no longer belongs to a body, so it has no ID a client could use.
+    selection: { selected: { curveIds: new Set([17, 99]), items: [{ versionId: 17 }] } },
+  };
+  const runtime = {
+    async getState() { return state; },
+    async read(source: string) { return await Function(`return (${source})`)().apply(editor, []); },
+  } as unknown as PlasticityRuntime;
+
+  const selection = await new PlasticityOperations(runtime).selection();
+
+  assert.deepEqual(selection.bodyIds, [7]);
+  assert.deepEqual(selection.curveIds, [7]);
+});
