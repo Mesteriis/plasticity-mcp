@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { exactMaterialCouponProcessSchema, MaterialCouponQualificationStore } from "../src/strength/material-qualification.ts";
 import { StrengthStore } from "../src/strength/store.ts";
 import { materializeRectangularCouponInput, rectangularCouponInputSchema } from "../src/strength/rectangular-coupon.ts";
@@ -14,7 +15,7 @@ import { assertCouponCalculation, parseMaterialCouponArgs, syntheticCouponFixtur
 
 test("material coupon runner is inert by default and guards live stores", () => {
   assert.equal(parseMaterialCouponArgs([]).help, true);
-  const result = spawnSync(process.execPath, [new URL("./verify-material-coupon-live.ts", import.meta.url).pathname], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("./verify-material-coupon-live.ts", import.meta.url))], { encoding: "utf8" });
   assert.equal(result.status, 0); assert.match(result.stdout, /No args\/--help are inert/);
   const args = ["--target", "experimental", "--allow-live", "--case", "registry", "--output", "new-output"];
   assert.equal(parseMaterialCouponArgs(args).case, "registry");

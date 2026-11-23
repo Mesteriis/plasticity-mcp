@@ -4,13 +4,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { FastenerGroupTestStore } from "../src/strength/fastener-group-test.ts";
 import { analyzeMaterialInterfaceTestCurve } from "../src/strength/interface-test.ts";
 import { assertCurveSummary, assertSpecimenSummary, fastenerTestFixture, interfaceTestFixture, parseJointTestArgs } from "./verify-joint-tests-live.ts";
 
 test("joint runner defaults to inert help and requires explicit live isolation arguments", () => {
   assert.equal(parseJointTestArgs([]).help, true);
-  const help = spawnSync(process.execPath, [new URL("./verify-joint-tests-live.ts", import.meta.url).pathname], { encoding: "utf8" });
+  const help = spawnSync(process.execPath, [fileURLToPath(new URL("./verify-joint-tests-live.ts", import.meta.url))], { encoding: "utf8" });
   assert.equal(help.status, 0); assert.match(help.stdout, /No args\/--help are inert/);
   const args = ["--target", "experimental", "--allow-live", "--case", "interface-strength", "--output", "new-dir"];
   assert.equal(parseJointTestArgs(args).case, "interface-strength");

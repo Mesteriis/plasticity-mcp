@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { assertAllowedDiscoveryUrl, parseReferenceDiscoveryArgs, validateDiscoveryAssets } from "./verify-reference-discovery-live.ts";
 
 const page = "https://dl.radxa.com/zero3/docs/hw/3w/";
@@ -14,7 +15,7 @@ function listing() {
 
 test("discovery help is inert and live cases require explicit consent, target and output", () => {
   assert.equal(parseReferenceDiscoveryArgs([]).help, true);
-  const help = spawnSync(process.execPath, [new URL("./verify-reference-discovery-live.ts", import.meta.url).pathname], { encoding: "utf8" });
+  const help = spawnSync(process.execPath, [fileURLToPath(new URL("./verify-reference-discovery-live.ts", import.meta.url))], { encoding: "utf8" });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /No args\/--help are inert/);
   const valid = ["--target", "experimental", "--allow-live", "--output", "new-output", "--case", "assets"];
